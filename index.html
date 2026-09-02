@@ -417,6 +417,24 @@
     return data;
   }
 
+  // بيجيب أكتر من جدول بنداء HTTP واحد بس (action=bulk) بدل نداء منفصل لكل جدول،
+  // وده أكبر سبب في إن الشاشات كانت بطيئة: كل نداء لـ Apps Script بياخد وقت بدء تشغيل لوحده.
+  async function sheetRequestBulk(tables){
+    if(!GOOGLE_SHEETS_WEBHOOK) throw new Error('رابط Google Sheets غير مضبوط');
+    if(!HOMSA_SESSION) throw new Error('انتهت جلسة الدخول — سجّل الدخول مرة أخرى');
+    const u=new URL(GOOGLE_SHEETS_WEBHOOK);
+    u.searchParams.set('action','bulk');
+    u.searchParams.set('tables',tables.join(','));
+    u.searchParams.set('session',HOMSA_SESSION);
+    const r=await fetch(u.toString(),{cache:'no-store'});
+    const data=await r.json();
+    if(!data.ok){
+      if(data.error==='Unauthorized'){ HOMSA_SESSION=''; localStorage.removeItem('homsa_session_token'); }
+      throw new Error(data.error||'فشل تحميل البيانات من Google Sheets');
+    }
+    return data.tables||{};
+  }
+
   /* ---------------- Storage helpers ---------------- */
   async function loadList(key){
     try{ return await sheetRequest('list',key); }
@@ -437,9 +455,52 @@
     await sheetRequest('delete',table,{id});
   }
 
+  // بيمسح مجموعة IDs بنداء واحد. لو مفيش IDs أو الباك إند القديم رافض action دي،
+  // بيرجع تلقائيًا لطريقة الحذف الفردي (متوازي) عشان النظام يفضل شغال حتى مع نسخة سيرفر قديمة.
+  async function apiDeleteMany(table, ids){
+    ids = (ids||[]).filter(Boolean);
+    if(!ids.length) return;
+    try{
+      await sheetRequest('batchDelete',table,{ids});
+    }catch(e){
+      console.error('batchDelete fallback', table, e);
+      await Promise.all(ids.map(id=>apiDelete(table,id)));
+    }
+  }
+
+  // بيحفظ مجموعة صفوف بنداء واحد، ولو حصل خطأ بيرجع لطريقة الحفظ الفردي (متوازي)
+  async function apiAddMany(table, records){
+    records = (records||[]).filter(Boolean);
+    if(!records.length) return records;
+    records.forEach(r=>{ if(!r.id) r.id=uid(); });
+    try{
+      await sheetRequest('batchUpsert',table,{rows:records});
+    }catch(e){
+      console.error('batchUpsert fallback', table, e);
+      await Promise.all(records.map(r=>sheetRequest('upsert',table,r)));
+    }
+    return records;
+  }
+
   const cache = {};
   async function getData(key){ if(!cache[key]) cache[key] = await loadList(key); return cache[key]; }
   function invalidate(key){ cache[key] = null; }
+
+  // بيجيب كذا جدول مع بعض على التوازي (نداء واحد للسيرفر لو مش متخزنين، فوري لو متخزنين بالفعل).
+  // بنستخدمها في أول أي شاشة تحتاج أكتر من جدول عشان منستناش كل جدول لوحده بالدور.
+  async function getDataMany(keys){
+    const need = [...new Set(keys)].filter(k=>!cache[k]);
+    if(need.length){
+      try{
+        const result = await sheetRequestBulk(need);
+        need.forEach(k=>{ cache[k] = result[k] || []; });
+      }catch(e){
+        console.error('bulk load error, falling back to parallel single loads', e);
+        await Promise.all(need.map(async k=>{ cache[k] = await loadList(k); }));
+      }
+    }
+    const out={}; keys.forEach(k=>out[k]=cache[k]||[]); return out;
+  }
 
   /* ---------------- App state ---------------- */
   let state = { user:null, view:'dashboard', sidebarOpen:false, modal:null };
@@ -658,6 +719,7 @@
     const isAdmin = state.user.role==='admin';
     let statsHtml = '';
     if(isPRUser()){
+      await getDataMany(['employees','indoor_leads','subscriptions']);
       const members=await prTeamMembers();
       const leads=await filterPRData('indoor_leads', await getData('indoor_leads'));
       const subs=await filterPRData('subscriptions', await getData('subscriptions'));
@@ -668,9 +730,8 @@
         <div class="stat-card"><div class="num">${subs.length}</div><div class="lbl">الاشتراكات</div></div>
       </div>`;
     } else if(isAdmin){
-      const emp = await getData('employees');
-      const comp = await getData('companies');
-      const acc = await getData('accounting');
+      const dash = await getDataMany(['employees','companies','accounting']);
+      const emp = dash.employees, comp = dash.companies, acc = dash.accounting;
       statsHtml = `<div class="stat-grid">
         <div class="stat-card"><div class="num">${emp.length}</div><div class="lbl">إجمالي الموظفين</div></div>
         <div class="stat-card"><div class="num">${comp.length}</div><div class="lbl">الشركات المسجلة</div></div>
@@ -692,6 +753,7 @@
 
 
   async function renderPRHierarchy(page){
+    await getDataMany(['teams','employees','indoor_leads','pr_member_data','indoor_data','subscriptions']);
     const teams=await getData('teams');
     const members=await prTeamMembers();
     const leads=await getData('indoor_leads');
@@ -1029,6 +1091,7 @@
 
   async function renderAnalytics(page, mods){
     const accessibleKeys = new Set(mods.map(([k])=>k));
+    await getDataMany(['dashboards','widgets','employees']);
     const allBoards = await getData('dashboards');
     const myBoards = allBoards.filter(b=> accessibleKeys.has(b.sourceModule));
     if(!state.analyticsBoard || !myBoards.find(b=>b.id===state.analyticsBoard)){
@@ -1106,7 +1169,7 @@
       document.getElementById('del-board-btn').addEventListener('click', async ()=>{
         if(!confirm('حذف اللوحة وكل عناصر التحليل بداخلها؟')) return;
         const ws = (await getData('widgets')).filter(w=>w.dashboardId===board.id);
-        for(const w of ws) await apiDelete('widgets', w.id);
+        await apiDeleteMany('widgets', ws.map(w=>w.id));
         invalidate('widgets');
         await apiDelete('dashboards', board.id);
         invalidate('dashboards');
@@ -1255,6 +1318,7 @@
   }
 
   async function renderTripsList(page){
+    await getDataMany(['trips','accom_hotels','accom_rooms','accom_guests']);
     const trips = (await getData('trips')).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
     page.innerHTML = `
       <div class="page-head"><h2>🏨 الإسكان — الرحلات</h2>
@@ -1277,16 +1341,12 @@
       e.stopPropagation();
       if(!confirm('حذف الرحلة وكل فنادقها وغرفها ونزلائها؟')) return;
       const hotels = (await getData('accom_hotels')).filter(h=>h.tripId===b.dataset.deltrip);
-      const rooms = await getData('accom_rooms');
-      const guests = await getData('accom_guests');
-      for(const h of hotels){
-        const hRooms = rooms.filter(r=>r.hotelId===h.id);
-        for(const r of hRooms){
-          for(const g of guests.filter(g=>g.roomId===r.id)) await apiDelete('accom_guests', g.id);
-          await apiDelete('accom_rooms', r.id);
-        }
-        await apiDelete('accom_hotels', h.id);
-      }
+      const rooms = (await getData('accom_rooms')).filter(r=>hotels.some(h=>h.id===r.hotelId));
+      const guests = (await getData('accom_guests')).filter(g=>rooms.some(r=>r.id===g.roomId));
+      // بنمسح كل مستوى دفعة واحدة (نداء واحد لكل جدول) بدل نداء منفصل لكل نزيل/غرفة/فندق
+      await apiDeleteMany('accom_guests', guests.map(g=>g.id));
+      await apiDeleteMany('accom_rooms', rooms.map(r=>r.id));
+      await apiDeleteMany('accom_hotels', hotels.map(h=>h.id));
       await apiDelete('trips', b.dataset.deltrip);
       invalidate('trips'); invalidate('accom_hotels'); invalidate('accom_rooms'); invalidate('accom_guests');
       render();
@@ -1316,6 +1376,7 @@
   }
 
   async function renderHotelsList(page){
+    await getDataMany(['trips','accom_hotels','accom_rooms']);
     const trips = await getData('trips');
     const trip = trips.find(t=>t.id===state.accomTripId);
     if(!trip){ state.accomView='trips'; return render(); }
@@ -1349,11 +1410,9 @@
       e.stopPropagation();
       if(!confirm('حذف الفندق وكل غرفه ونزلائه؟')) return;
       const rooms = (await getData('accom_rooms')).filter(r=>r.hotelId===b.dataset.delhotel);
-      const guests = await getData('accom_guests');
-      for(const r of rooms){
-        for(const g of guests.filter(g=>g.roomId===r.id)) await apiDelete('accom_guests', g.id);
-        await apiDelete('accom_rooms', r.id);
-      }
+      const guests = (await getData('accom_guests')).filter(g=>rooms.some(r=>r.id===g.roomId));
+      await apiDeleteMany('accom_guests', guests.map(g=>g.id));
+      await apiDeleteMany('accom_rooms', rooms.map(r=>r.id));
       await apiDelete('accom_hotels', b.dataset.delhotel);
       invalidate('accom_hotels'); invalidate('accom_rooms'); invalidate('accom_guests');
       render();
@@ -1383,6 +1442,7 @@
   }
 
   async function renderRoomsList(page){
+    await getDataMany(['accom_hotels','trips','accom_rooms','accom_guests']);
     const hotels = await getData('accom_hotels');
     const hotel = hotels.find(h=>h.id===state.accomHotelId);
     if(!hotel){ state.accomView='hotels'; return render(); }
@@ -1419,7 +1479,7 @@
       e.stopPropagation();
       if(!confirm('حذف الغرفة وكل نزلائها؟')) return;
       const gs = (await getData('accom_guests')).filter(g=>g.roomId===b.dataset.delroom);
-      for(const g of gs) await apiDelete('accom_guests', g.id);
+      await apiDeleteMany('accom_guests', gs.map(g=>g.id));
       await apiDelete('accom_rooms', b.dataset.delroom);
       invalidate('accom_rooms'); invalidate('accom_guests');
       render();
@@ -1448,6 +1508,7 @@
   }
 
   async function renderGuestsList(page){
+    await getDataMany(['accom_rooms','accom_hotels','trips','accom_guests']);
     const rooms = await getData('accom_rooms');
     const room = rooms.find(r=>r.id===state.accomRoomId);
     if(!room){ state.accomView='hotels'; return render(); }
@@ -1520,6 +1581,7 @@
      ================================================================ */
   async function renderIndoorDataSheet(page){
     const mod = MODULES.indoor_data;
+    await getDataMany(['indoor_data','employees','app_settings']);
     const data = await getData('indoor_data');
     const emps = await getData('employees');
     const repOptions = emps.filter(e=>e.department==='علاقات عامة - إن دور').map(e=>e.name);
@@ -1584,6 +1646,7 @@
   async function renderModule(page, key){
     const mod = MODULES[key];
     if(!mod || !mod.roles.includes(state.user.role)) return;
+    await getDataMany(isPRUser() ? [key,'employees'] : [key]);
     const allData = await getData(key);
     const data = await filterPRData(key, allData);
     page.innerHTML = `
@@ -1686,7 +1749,7 @@
         const user={id:uid(),name:payload.name,username:payload.username,passwordHash:await sha256(payload.password),role:payload.role,status:'active',
           team:payload.employeeData.team||'',employeeId};
         const employee={id:employeeId,name:payload.name,username:payload.username,department:payload.employeeData.department||ROLE_LABELS[payload.role]||'',status:'active',...payload.employeeData};
-        await apiAdd('users',user); await apiAdd('employees',employee);
+        await Promise.all([apiAdd('users',user), apiAdd('employees',employee)]);
         invalidate('employees'); invalidate('users'); modalBg.remove(); render();
       }catch(err){
         console.error(err); alert(err.message || 'فشل إنشاء حساب الموظف'); btn.disabled=false; btn.textContent='إنشاء الحساب والموظف';
@@ -1740,6 +1803,8 @@
   async function openForm(key, id){
     const mod = MODULES[key];
     if(!mod || !mod.roles.includes(state.user.role)) return;
+    const refKeys = mod.fields.filter(f=>f.type==='dynamicSelect').map(f=>f.ref);
+    await getDataMany([key, 'employees', ...refKeys]);
     const list = await getData(key);
     const row = id? list.find(r=>r.id===id) : {};
     if(id && !prCanEditRow(key,row)){ alert('ليس لديك صلاحية لتعديل هذه البيانات'); return; }
@@ -1844,21 +1909,37 @@
     return `<div class="field ${full}"><label>${esc(f.label)}</label>${inner}</div>`;
   }
 
-  (async function initAuth(){
+  (function initAuth(){
+    // بنعرض الشاشة فورًا ببيانات الجلسة المحفوظة محليًا من غير ما ننتظر رد السيرفر،
+    // عشان فتح التطبيق يحس إنه سريع جدًا، وبعدين بنتأكد من صلاحية الجلسة في الخلفية.
     try{
       const saved=localStorage.getItem('homsa_session_user');
       HOMSA_SESSION=localStorage.getItem('homsa_session_token') || '';
       if(saved && HOMSA_SESSION){
-        const u=new URL(GOOGLE_SHEETS_WEBHOOK);
-        u.searchParams.set('action','me');
-        u.searchParams.set('session',HOMSA_SESSION);
-        const r=await fetch(u.toString(),{cache:'no-store'});
-        const data=await r.json();
-        if(data.ok) state.user=data.user;
-        else { localStorage.removeItem('homsa_session_user'); localStorage.removeItem('homsa_session_token'); HOMSA_SESSION=''; }
+        try{ state.user = JSON.parse(saved); }catch(_){ state.user=null; }
       }
-    }catch(e){ console.error('Init error',e); localStorage.removeItem('homsa_session_user'); localStorage.removeItem('homsa_session_token'); HOMSA_SESSION=''; }
+    }catch(e){ console.error('Init error', e); }
+
     render();
+
+    if(state.user && HOMSA_SESSION){
+      (async function verifySessionInBackground(){
+        try{
+          const u=new URL(GOOGLE_SHEETS_WEBHOOK);
+          u.searchParams.set('action','me');
+          u.searchParams.set('session',HOMSA_SESSION);
+          const r=await fetch(u.toString(),{cache:'no-store'});
+          const data=await r.json();
+          if(data.ok){
+            state.user=data.user;
+            localStorage.setItem('homsa_session_user', JSON.stringify(data.user));
+          } else {
+            localStorage.removeItem('homsa_session_user'); localStorage.removeItem('homsa_session_token');
+            HOMSA_SESSION=''; state.user=null; render();
+          }
+        }catch(e){ console.error('Session check error', e); }
+      })();
+    }
   })();
 })();
 </script>
