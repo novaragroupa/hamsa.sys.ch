@@ -441,15 +441,18 @@
   async function apiAdd(table, record){
     if(!record.id) record.id=uid();
     await sheetRequest('upsert',table,record);
+    cacheUpsertLocal(table, record);
     return record;
   }
 
   async function apiUpdate(table, record){
     await sheetRequest('upsert',table,record);
+    cacheUpsertLocal(table, record);
   }
 
   async function apiDelete(table, id){
     await sheetRequest('delete',table,{id});
+    cacheDeleteLocal(table, id);
   }
 
   // بيمسح مجموعة IDs بنداء واحد. لو مفيش IDs أو الباك إند القديم رافض action دي،
@@ -459,6 +462,7 @@
     if(!ids.length) return;
     try{
       await sheetRequest('batchDelete',table,{ids});
+      ids.forEach(id=>cacheDeleteLocal(table,id));
     }catch(e){
       console.error('batchDelete fallback', table, e);
       await Promise.all(ids.map(id=>apiDelete(table,id)));
@@ -472,9 +476,11 @@
     records.forEach(r=>{ if(!r.id) r.id=uid(); });
     try{
       await sheetRequest('batchUpsert',table,{rows:records});
+      records.forEach(r=>cacheUpsertLocal(table,r));
     }catch(e){
       console.error('batchUpsert fallback', table, e);
       await Promise.all(records.map(r=>sheetRequest('upsert',table,r)));
+      records.forEach(r=>cacheUpsertLocal(table,r));
     }
     return records;
   }
@@ -482,6 +488,19 @@
   const cache = {};
   async function getData(key){ if(!cache[key]) cache[key] = await loadList(key); return cache[key]; }
   function invalidate(key){ cache[key] = null; }
+
+  // بعد أي حفظ/تعديل/حذف ناجح، بنحدّث الكاش المحلي فورًا بدل ما نمسحه ونرجع نطلب
+  // الجدول تاني من السيرفر (اللي كان بيضاعف وقت كل عملية حفظ أو حذف في النظام).
+  function cacheUpsertLocal(table, record){
+    if(!cache[table] || !record || record.id===undefined) return;
+    const idx = cache[table].findIndex(r=>String(r.id)===String(record.id));
+    if(idx>=0) cache[table][idx] = {...cache[table][idx], ...record};
+    else cache[table] = [...cache[table], record];
+  }
+  function cacheDeleteLocal(table, id){
+    if(!cache[table]) return;
+    cache[table] = cache[table].filter(r=>String(r.id)!==String(id));
+  }
 
   // بيجيب كذا جدول مع بعض على التوازي (نداء واحد للسيرفر لو مش متخزنين، فوري لو متخزنين بالفعل).
   // بنستخدمها في أول أي شاشة تحتاج أكتر من جدول عشان منستناش كل جدول لوحده بالدور.
@@ -577,7 +596,6 @@
       packageType:'', subscriptionStatus:'نشط', notes:lead.notes||''
     };
     await apiAdd('subscriptions',sub);
-    invalidate('subscriptions');
   }
 
   /* ---------------- Render router ---------------- */
@@ -659,7 +677,6 @@
     const row = rows.find(r=>r.key===key);
     const rec = row? {...row, value} : {id:'cfg_'+key, key, value};
     await apiAdd('app_settings', rec);
-    invalidate('app_settings');
   }
 
   async function renderShell(){
@@ -942,7 +959,6 @@
       page.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', async ()=>{
         if(!confirm('تأكيد الحذف؟')) return;
         await apiDelete('accounting', b.dataset.del);
-        invalidate('accounting');
         render();
       }));
     }
@@ -974,7 +990,6 @@
       const newRow = row.id? {...row} : {id: uid()};
       LEDGER_FIELDS.forEach(f=>{ newRow[f.key] = modalBg.querySelector(`[name="${f.key}"]`).value; });
       if(isNew) await apiAdd('accounting', newRow); else await apiUpdate('accounting', newRow);
-      invalidate('accounting');
       state.ledgerClient = newRow.clientName;
       modalBg.remove();
       render();
@@ -1164,9 +1179,7 @@
         if(!confirm('حذف اللوحة وكل عناصر التحليل بداخلها؟')) return;
         const ws = (await getData('widgets')).filter(w=>w.dashboardId===board.id);
         await apiDeleteMany('widgets', ws.map(w=>w.id));
-        invalidate('widgets');
         await apiDelete('dashboards', board.id);
-        invalidate('dashboards');
         state.analyticsBoard = null;
         render();
       });
@@ -1178,7 +1191,6 @@
       page.querySelectorAll('[data-delw]').forEach(b=>b.addEventListener('click', async ()=>{
         if(!confirm('حذف عنصر التحليل؟')) return;
         await apiDelete('widgets', b.dataset.delw);
-        invalidate('widgets');
         render();
       }));
     }
@@ -1212,7 +1224,6 @@
       const rec = {id: uid(), name: fd.get('name'), sourceModule: fd.get('sourceModule'),
         department: state.user.role, createdBy: state.user.name};
       await apiAdd('dashboards', rec);
-      invalidate('dashboards');
       state.analyticsBoard = rec.id;
       state.analyticsFilters = {};
       modalBg.remove();
@@ -1280,7 +1291,6 @@
         metricField: fd.get('metricField') || '',
       };
       if(widget) await apiUpdate('widgets', rec); else await apiAdd('widgets', rec);
-      invalidate('widgets');
       modalBg.remove();
       render();
     });
@@ -1342,7 +1352,6 @@
       await apiDeleteMany('accom_rooms', rooms.map(r=>r.id));
       await apiDeleteMany('accom_hotels', hotels.map(h=>h.id));
       await apiDelete('trips', b.dataset.deltrip);
-      invalidate('trips'); invalidate('accom_hotels'); invalidate('accom_rooms'); invalidate('accom_guests');
       render();
     }));
   }
@@ -1365,7 +1374,7 @@
       e.preventDefault();
       const fd = new FormData(e.target);
       const rec = {id:uid(), date:fd.get('date'), label:fd.get('label'), notes:fd.get('notes')};
-      await apiAdd('trips', rec); invalidate('trips'); modalBg.remove(); render();
+      await apiAdd('trips', rec); modalBg.remove(); render();
     });
   }
 
@@ -1408,7 +1417,6 @@
       await apiDeleteMany('accom_guests', guests.map(g=>g.id));
       await apiDeleteMany('accom_rooms', rooms.map(r=>r.id));
       await apiDelete('accom_hotels', b.dataset.delhotel);
-      invalidate('accom_hotels'); invalidate('accom_rooms'); invalidate('accom_guests');
       render();
     }));
   }
@@ -1431,7 +1439,7 @@
       e.preventDefault();
       const fd = new FormData(e.target);
       const rec = {id:uid(), tripId, name:fd.get('name'), location:fd.get('location'), notes:fd.get('notes')};
-      await apiAdd('accom_hotels', rec); invalidate('accom_hotels'); modalBg.remove(); render();
+      await apiAdd('accom_hotels', rec); modalBg.remove(); render();
     });
   }
 
@@ -1475,7 +1483,6 @@
       const gs = (await getData('accom_guests')).filter(g=>g.roomId===b.dataset.delroom);
       await apiDeleteMany('accom_guests', gs.map(g=>g.id));
       await apiDelete('accom_rooms', b.dataset.delroom);
-      invalidate('accom_rooms'); invalidate('accom_guests');
       render();
     }));
   }
@@ -1497,7 +1504,7 @@
       e.preventDefault();
       const fd = new FormData(e.target);
       const rec = {id:uid(), hotelId, roomNumber:fd.get('roomNumber'), capacity:fd.get('capacity')};
-      await apiAdd('accom_rooms', rec); invalidate('accom_rooms'); modalBg.remove(); render();
+      await apiAdd('accom_rooms', rec); modalBg.remove(); render();
     });
   }
 
@@ -1534,7 +1541,7 @@
     page.querySelectorAll('[data-editg]').forEach(b=>b.addEventListener('click', ()=>openGuestForm(room.id, b.dataset.editg)));
     page.querySelectorAll('[data-delg]').forEach(b=>b.addEventListener('click', async ()=>{
       if(!confirm('حذف النزيل؟')) return;
-      await apiDelete('accom_guests', b.dataset.delg); invalidate('accom_guests'); render();
+      await apiDelete('accom_guests', b.dataset.delg); render();
     }));
   }
 
@@ -1565,7 +1572,7 @@
       const rec = {id: id||uid(), roomId, name:fd.get('name'), passportNumber:fd.get('passportNumber'),
         phone:fd.get('phone'), flightStatus:fd.get('flightStatus'), notes:fd.get('notes')};
       if(id) await apiUpdate('accom_guests', rec); else await apiAdd('accom_guests', rec);
-      invalidate('accom_guests'); modalBg.remove(); render();
+      modalBg.remove(); render();
     });
   }
 
@@ -1607,7 +1614,7 @@
     }
     document.getElementById('add-row-btn').addEventListener('click', async ()=>{
       const rec = {id:uid()}; cols.forEach(f=>rec[f.key]='');
-      await apiAdd('indoor_data', rec); invalidate('indoor_data'); render();
+      await apiAdd('indoor_data', rec); render();
     });
     page.querySelectorAll('.cell-input').forEach(inp=>{
       inp.addEventListener('change', async ()=>{
@@ -1615,12 +1622,12 @@
         const rows = await getData('indoor_data');
         const rec = rows.find(r=>r.id===id); if(!rec) return;
         rec[key] = inp.value;
-        await apiUpdate('indoor_data', rec); invalidate('indoor_data');
+        await apiUpdate('indoor_data', rec);
       });
     });
     page.querySelectorAll('[data-delrow]').forEach(b=>b.addEventListener('click', async ()=>{
       if(!confirm('حذف الصف؟')) return;
-      await apiDelete('indoor_data', b.dataset.delrow); invalidate('indoor_data'); render();
+      await apiDelete('indoor_data', b.dataset.delrow); render();
     }));
   }
 
@@ -1664,7 +1671,7 @@
       const row=data.find(r=>String(r.id)===String(b.dataset.del));
       if(!prCanEditRow(key,row)){ alert('ليس لديك صلاحية لحذف هذه البيانات'); return; }
       if(!confirm('تأكيد الحذف؟')) return;
-      await apiDelete(key,b.dataset.del); invalidate(key); render();
+      await apiDelete(key,b.dataset.del); render();
     }));
   }
 
@@ -1744,7 +1751,7 @@
           team:payload.employeeData.team||'',employeeId};
         const employee={id:employeeId,name:payload.name,username:payload.username,department:payload.employeeData.department||ROLE_LABELS[payload.role]||'',status:'active',...payload.employeeData};
         await Promise.all([apiAdd('users',user), apiAdd('employees',employee)]);
-        invalidate('employees'); invalidate('users'); modalBg.remove(); render();
+        modalBg.remove(); render();
       }catch(err){
         console.error(err); alert(err.message || 'فشل إنشاء حساب الموظف'); btn.disabled=false; btn.textContent='إنشاء الحساب والموظف';
       }
@@ -1871,9 +1878,7 @@
       }
 
       if(isNew) await apiAdd(key, newRow); else await apiUpdate(key, newRow);
-      invalidate(key);
       if(key==='indoor_leads') await maybeCreateSubscriptionFromLead(newRow);
-      if(key==='subscriptions') invalidate('subscriptions');
       modalBg.remove();
       render();
     });
