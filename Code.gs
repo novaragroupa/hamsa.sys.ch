@@ -25,10 +25,23 @@ function doGet(e) {
     if (p.action === 'me') return json({ok:true, user:publicSessionUser(session)});
 
     if (p.action === 'list' && p.table) {
-      const ss = SpreadsheetApp.getActive();
-      const sheet = ss.getSheetByName(safeSheetName(p.table));
-      const rows = sheet ? readRows(sheet) : [];
-      return json({ok:true, rows:filterRowsForSession(rows, String(p.table), session)});
+      const table = safeSheetName(p.table);
+      const rows = getCachedRows(table);
+      return json({ok:true, rows:filterRowsForSession(rows, table, session)});
+    }
+
+    // action=bulk&tables=teams,employees,indoor_leads,...
+    // بيرجع كل الجداول المطلوبة في نداء واحد بس، عشان نقلل عدد الطلبات لسيرفر Apps Script
+    // (كل نداء منفصل بياخد وقت بدء تشغيل خاص بيه، فتجميعهم في نداء واحد بيسرّع الواجهة كتير).
+    if (p.action === 'bulk' && p.tables) {
+      const tables = String(p.tables).split(',')
+        .map(function(t){ return safeSheetName(String(t).trim()); })
+        .filter(Boolean);
+      const out = {};
+      tables.forEach(function(t){
+        out[t] = filterRowsForSession(getCachedRows(t), t, session);
+      });
+      return json({ok:true, tables:out});
     }
 
     return json({ok:true, service:'homsa-google-sheets-sync', user:publicSessionUser(session)});
@@ -60,9 +73,22 @@ function doPost(e) {
 
     if (body.action === 'delete') {
       deleteRowById(sheet, String(body.payload && body.payload.id || ''));
+      invalidateCachedRows(table);
     } else if (body.action === 'upsert') {
       const payload = enforceOwnership(session, table, body.payload || {});
       upsertRow(sheet, payload);
+      invalidateCachedRows(table);
+    } else if (body.action === 'batchDelete') {
+      // بيمسح مجموعة صفوف بنداء واحد بدل ما الواجهة تبعت نداء منفصل لكل صف (أسرع بكتير في عمليات الحذف المتتالية زي حذف رحلة بكل فنادقها وغرفها ونزلائها)
+      const ids = (body.payload && body.payload.ids) || [];
+      deleteRowsBatch(sheet, ids);
+      invalidateCachedRows(table);
+    } else if (body.action === 'batchUpsert') {
+      // بيحفظ مجموعة صفوف بنداء واحد بدل نداء منفصل لكل صف
+      const rows = (body.payload && body.payload.rows) || [];
+      const cleanRows = rows.map(function(r){ return enforceOwnership(session, table, r || {}); });
+      upsertRowsBatch(sheet, cleanRows);
+      invalidateCachedRows(table);
     } else {
       return json({ok:false, error:'Unknown action'}, 400);
     }
@@ -278,6 +304,90 @@ function enforceOwnership(session, table, payload) {
   }
 
   return p;
+}
+
+/* ---------------- Performance: caching + batch ops ---------------- */
+// الهدف: تقليل عدد النداءات للـ Spreadsheet ولسيرفر Apps Script نفسه، لأن
+// كل نداء (حتى لو بسيط) بياخد وقت بدء تشغيل. الكاش هنا مشترك بين كل المستخدمين
+// (ScriptCache) ومدته قصيرة عشان البيانات تفضل حديثة، وبيتم إلغاؤه فورًا بعد أي كتابة.
+
+const SHEET_CACHE_TTL_SECONDS = 20;
+
+function getCachedRows(sheetName) {
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'rows_' + sheetName;
+  try {
+    const cached = cache.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+  } catch (_) { /* تجاهل أي خطأ كاش وارجع لقراءة الشيت مباشرة */ }
+
+  const ss = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName(sheetName);
+  const rows = sheet ? readRows(sheet) : [];
+
+  try {
+    const serialized = JSON.stringify(rows);
+    // CacheService بيرفض القيم اللي أكبر من ~100KB، فبنتجاهل الكاش في الحالة دي بس من غير ما نكسر الطلب
+    if (serialized.length < 95000) cache.put(cacheKey, serialized, SHEET_CACHE_TTL_SECONDS);
+  } catch (_) { /* تجاهل */ }
+
+  return rows;
+}
+
+function invalidateCachedRows(sheetName) {
+  try { CacheService.getScriptCache().remove('rows_' + sheetName); } catch (_) {}
+}
+
+function upsertRowsBatch(sheet, rows) {
+  if (!rows || !rows.length) return;
+
+  const allKeys = [];
+  const seenKey = {};
+  rows.forEach(function(r) {
+    Object.keys(r || {}).forEach(function(k) {
+      if (!seenKey[k]) { seenKey[k] = true; allKeys.push(k); }
+    });
+  });
+
+  const h = ensureHeaders(sheet, allKeys);
+  const idCol = h.indexOf('id');
+  const lastRow = sheet.getLastRow();
+
+  // نبني index مرة واحدة بدل ما نقرا عمود الـid من جديد لكل صف (زي ما كان بيحصل قبل كده)
+  const idIndex = {};
+  if (idCol >= 0 && lastRow > 1) {
+    const idValues = sheet.getRange(2, idCol + 1, lastRow - 1, 1).getValues().flat().map(String);
+    idValues.forEach(function(id, i) { if (id) idIndex[id] = i + 2; });
+  }
+
+  let nextRow = lastRow + 1;
+  rows.forEach(function(obj) {
+    const id = String(obj.id || '');
+    let row = (id && idIndex[id]) ? idIndex[id] : nextRow++;
+    const values = h.map(function(k) {
+      const v = obj[k];
+      return v === null || v === undefined ? '' : (typeof v === 'object' ? JSON.stringify(v) : v);
+    });
+    sheet.getRange(row, 1, 1, h.length).setValues([values]);
+    if (id) idIndex[id] = row;
+  });
+}
+
+function deleteRowsBatch(sheet, ids) {
+  if (!ids || !ids.length || sheet.getLastRow() < 2) return;
+  const h = headers(sheet), idCol = h.indexOf('id') + 1;
+  if (!idCol) return;
+
+  const idSet = {};
+  ids.forEach(function(id) { idSet[String(id)] = true; });
+
+  const values = sheet.getRange(2, idCol, sheet.getLastRow() - 1, 1).getValues().flat().map(String);
+  const rowsToDelete = [];
+  values.forEach(function(v, i) { if (idSet[v]) rowsToDelete.push(i + 2); });
+
+  // لازم نمسح من الصف الأخير للأول عشان الأرقام متتغيرش تحتنا ونحن بنمسح
+  rowsToDelete.sort(function(a, b) { return b - a; });
+  rowsToDelete.forEach(function(r) { sheet.deleteRow(r); });
 }
 
 /* ---------------- Sheets CRUD ---------------- */
