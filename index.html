@@ -354,10 +354,11 @@
       ]},
 
     /* ---------------- علاقات عامة: هيكل الفرق والاشتراكات ---------------- */
-    pr_member_data:{ title:'داتا ولينكات أعضاء العلاقات العامة', icon:'🔗', roles:['admin','pr_manager','pr_leader','pr_member'],
+    pr_member_data:{ title:'الداتا والأرقام واللينكات', icon:'🔗', roles:['admin','pr_manager','pr_leader','pr_member'],
       fields:[
         {key:'memberId', label:'عضو الفريق', type:'dynamicSelect', ref:'employees', refField:'name'},
-        {key:'title', label:'اسم الداتا / اللينك', type:'text', required:true},
+        {key:'title', label:'اسم الداتا / الرقم / اللينك', type:'text', required:true},
+        {key:'phone', label:'رقم الهاتف', type:'text'},
         {key:'link', label:'الرابط', type:'url'},
         {key:'data', label:'تفاصيل الداتا', type:'textarea'},
         {key:'notes', label:'ملاحظات', type:'textarea'},
@@ -577,18 +578,19 @@
 
 
   function accessibleModules(){
+    const hiddenModules = new Set(['companies','callcenter_payments','indoor_data']);
     if(state.user?.role==='pr_manager') {
-      return Object.entries(MODULES).filter(([k,m])=>m.roles.includes('pr_manager'));
+      return Object.entries(MODULES).filter(([k,m])=>!hiddenModules.has(k) && m.roles.includes('pr_manager'));
     }
     if(state.user?.role==='pr_leader' || state.user?.role==='pr_member') {
-      return Object.entries(MODULES).filter(([k,m])=>m.roles.includes(state.user.role));
+      return Object.entries(MODULES).filter(([k,m])=>!hiddenModules.has(k) && m.roles.includes(state.user.role));
     }
-    return Object.entries(MODULES).filter(([k,m])=>m.roles.includes(state.user.role));
+    return Object.entries(MODULES).filter(([k,m])=>!hiddenModules.has(k) && m.roles.includes(state.user.role));
   }
 
   function analyticsAccessibleModules(){
     // مسؤول تحليل البيانات (analyst) والمدير يقدروا يبنوا لوحات تحليل من أي قسم في النظام
-    if(state.user.role==='admin' || state.user.role==='analyst') return Object.entries(MODULES);
+    if(state.user.role==='admin' || state.user.role==='analyst') return Object.entries(MODULES).filter(([k])=>!['companies','callcenter_payments','indoor_data'].includes(k));
     return accessibleModules();
   }
 
@@ -611,13 +613,7 @@
       `<button class="nav-item ${state.view==='dashboard'?'active':''}" data-view="dashboard">🏠<span>الرئيسية</span></button>`,
       `<button class="nav-item ${state.view==='analytics'?'active':''}" data-view="analytics">📊<span>تحليل البيانات</span></button>`,
     ];
-    if(state.user.role==='admin' || state.user.role==='pr_out'){
-      navItems.push(`<button class="nav-item ${state.view==='areas'?'active':''}" data-view="areas">🗺️<span>مناطق الإسكندرية</span></button>`);
-    }
-    if(state.user.role==='admin' || state.user.role==='accounting'){
-      navItems.push(`<button class="nav-item ${state.view==='ledger'?'active':''}" data-view="ledger">💰<span>كشف الحساب</span></button>`);
-    }
-    if(isPRUser()){
+        if(isPRUser()){
       navItems.push(`<button class="nav-item ${state.view==='pr_teams'?'active':''}" data-view="pr_teams">🧩<span>${state.user.role==='pr_member'?'بياناتي':'فرق العلاقات العامة'}</span></button>`);
     }
     mods.forEach(([k,m])=>{
@@ -650,13 +646,11 @@
     document.getElementById('menu-toggle').addEventListener('click', ()=>{ state.sidebarOpen=!state.sidebarOpen; render(); });
 
     const page = document.getElementById('page');
+    if(['areas','ledger','companies','callcenter_payments','indoor_data'].includes(state.view)){ state.view='dashboard'; }
     if(state.view==='dashboard') await renderDashboard(page, mods);
     else if(state.view==='pr_teams') await renderPRHierarchy(page);
     else if(state.view==='analytics') await renderAnalytics(page, analyticsAccessibleModules());
-    else if(state.view==='areas') await renderAreas(page);
-    else if(state.view==='ledger') await renderLedger(page);
     else if(state.view==='accommodation') await renderAccommodationHub(page);
-    else if(state.view==='indoor_data') await renderIndoorDataSheet(page);
     else if(MODULES[state.view]) await renderModule(page, state.view);
   }
 
@@ -701,7 +695,12 @@
     const teams=await getData('teams');
     const members=await prTeamMembers();
     const leads=await getData('indoor_leads');
-    const dataRows=await getData('pr_member_data');
+    const memberData=await getData('pr_member_data');
+    const legacyData=await getData('indoor_data');
+    const dataRows=[...memberData, ...legacyData.map(r=>({
+      id:r.id, memberId:r.responsiblePerson||'', title:r.name||'داتا / رقم', phone:r.phone||'',
+      link:r.link||'', data:r.source||'', notes:r.notes||''
+    }))];
     const subs=await getData('subscriptions');
     const teamNames=[...new Set(members.map(m=>m.team).filter(Boolean))];
     const visibleTeams = state.user.role==='pr_manager' ? teams.filter(t=>t.department===ROLE_LABELS.pr_in || t.department==='علاقات عامة - إن دور' || teamNames.includes(t.name))
@@ -776,14 +775,14 @@
             <div class="detail-item"><div class="k">المهتمون</div><div class="v">${ml.filter(x=>x.type==='مهتم').length}</div></div>
             <div class="detail-item"><div class="k">المندوبون</div><div class="v">${ml.filter(x=>x.type==='مندوب').length}</div></div>
             <div class="detail-item"><div class="k">الاشتراكات</div><div class="v">${ms.length}</div></div>
-            <div class="detail-item"><div class="k">الداتا/اللينكات</div><div class="v">${md.length}</div></div>
+            <div class="detail-item"><div class="k">الداتا / الأرقام / اللينكات</div><div class="v">${md.length}</div></div>
           </div>
         </div>
         <div class="card"><div class="page-head"><h3>🎯 مهتمون ومندوبون</h3><button class="btn-primary btn-gold" id="add-member-lead" style="width:auto;padding:8px 15px;">+ إضافة</button></div>
           ${ml.length?`<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>النوع</th><th>الهاتف</th><th>الحالة</th></tr></thead><tbody>${ml.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.type)}</td><td>${esc(x.phone)}</td><td>${esc(x.status)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state">لا توجد بيانات</div>'}
         </div>
-        <div class="card"><div class="page-head"><h3>🔗 داتا ولينكات العضو</h3><button class="btn-primary btn-gold" id="add-member-data" style="width:auto;padding:8px 15px;">+ إضافة</button></div>
-          ${md.length?md.map(x=>`<div class="link-box"><div><b>${esc(x.title)}</b><div style="font-size:12px;color:var(--muted)">${esc(x.data||x.notes||'')}</div></div>${x.link?`<a href="${esc(x.link)}" target="_blank" rel="noopener">فتح ↗</a>`:''}</div>`).join(''):'<div class="empty-state">لا توجد داتا</div>'}
+        <div class="card"><div class="page-head"><h3>🔗 الداتا والأرقام واللينكات</h3><button class="btn-primary btn-gold" id="add-member-data" style="width:auto;padding:8px 15px;">+ إضافة</button></div>
+          ${md.length?md.map(x=>`<div class="link-box"><div><b>${esc(x.title)}</b>${x.phone?`<div style="font-size:12px;margin-top:3px">📞 ${esc(x.phone)}</div>`:''}<div style="font-size:12px;color:var(--muted)">${esc(x.data||x.notes||'')}</div></div>${x.link?`<a href="${esc(x.link)}" target="_blank" rel="noopener">فتح ↗</a>`:''}</div>`).join(''):'<div class="empty-state">لا توجد داتا</div>'}
         </div>
         <div class="card"><h3>💳 اشتراكات العضو</h3>
           ${ms.length?`<div class="table-wrap"><table><thead><tr><th>العميل</th><th>التاريخ</th><th>الباقة</th><th>الحالة</th></tr></thead><tbody>${ms.map(x=>`<tr><td>${esc(x.customerName)}</td><td>${esc(x.subscriptionDate)}</td><td>${esc(x.packageType)}</td><td>${esc(x.subscriptionStatus)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state">لا توجد اشتراكات</div>'}
