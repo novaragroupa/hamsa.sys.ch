@@ -233,7 +233,7 @@
   const ROLE_LABELS = {
     admin:'مدير النظام', hr:'HR',
     pr_manager:'المدير العام للعلاقات العامة',
-    pr_leader:'Team Leader - العلاقات العامة',
+    pr_leader:'رئيس فريق - العلاقات العامة',
     pr_member:'عضو فريق - العلاقات العامة',
     pr_out:'علاقات عامة - أوت دور', pr_in:'علاقات عامة - إن دور',
     reception:'استقبال', accounting:'حسابات', callcenter:'كول سنتر', accommodation:'تسكين', system:'حجوزات النظام',
@@ -554,11 +554,12 @@
       const p = document.getElementById('login-p').value;
       btn.textContent = 'جارٍ الدخول...'; btn.disabled = true;
       try{
-        const url = new URL(GOOGLE_SHEETS_WEBHOOK);
-        url.searchParams.set('action','login');
-        url.searchParams.set('username',u);
-        url.searchParams.set('password',p);
-        const response = await fetch(url.toString(),{cache:'no-store'});
+        const response = await fetch(GOOGLE_SHEETS_WEBHOOK,{
+          method:'POST',
+          headers:{'Content-Type':'text/plain;charset=utf-8'},
+          body:JSON.stringify({action:'login',username:u,password:p}),
+          cache:'no-store'
+        });
         const data = await response.json();
         if(!data.ok) throw new Error(data.error||'اسم المستخدم أو كلمة المرور غير صحيحة');
         HOMSA_SESSION=data.session;
