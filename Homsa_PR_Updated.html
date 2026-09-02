@@ -1,0 +1,1866 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام إدارة همسة للسياحة</title>
+</head>
+<body>
+<div id="app-root"></div>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+
+  :root{
+    --navy-900:#0c1f3d;
+    --navy-800:#14315c;
+    --navy-700:#1b3a6b;
+    --navy-600:#25508f;
+    --gold-500:#f2b705;
+    --gold-600:#c99a03;
+    --sand-50:#faf7f0;
+    --sand-100:#f1ead8;
+    --ink:#14213d;
+    --line:#e3ddce;
+    --muted:#6b7280;
+    --danger:#b3261e;
+    --success:#1a7a4c;
+    --warn:#a5690a;
+  }
+  *{box-sizing:border-box;}
+  #app-root, #app-root *{font-family:'Cairo',sans-serif;}
+  #app-root{direction:rtl;color:var(--ink);background:var(--sand-50);min-height:100vh;}
+  #app-root button{font-family:inherit;cursor:pointer;border:none;}
+  #app-root input, #app-root select, #app-root textarea{font-family:inherit;}
+
+  /* ---------- Login ---------- */
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(circle at 30% 20%, var(--navy-700), var(--navy-900) 65%);
+    padding:24px;}
+  .login-card{background:#fff;border-radius:20px;width:100%;max-width:400px;overflow:hidden;
+    box-shadow:0 30px 60px rgba(12,31,61,.35);position:relative;}
+  .arch-top{height:110px;background:linear-gradient(160deg,var(--navy-700),var(--navy-900));
+    position:relative;display:flex;align-items:center;justify-content:center;}
+  .arch-top::after{content:"";position:absolute;bottom:-1px;left:50%;transform:translateX(-50%);
+    width:120px;height:60px;background:#fff;border-radius:60px 60px 0 0;}
+  .arch-top img{height:56px;position:relative;z-index:2;margin-top:-10px;filter:brightness(0) invert(1);}
+  .login-body{padding:38px 32px 32px;}
+  .login-body h1{font-size:20px;font-weight:800;margin:0 0 4px;color:var(--navy-900);text-align:center;}
+  .login-body p.sub{text-align:center;color:var(--muted);font-size:13px;margin:0 0 26px;}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--navy-800);}
+  .field input, .field select, .field textarea{width:100%;padding:11px 14px;border:1.5px solid var(--line);
+    border-radius:10px;font-size:14px;background:var(--sand-50);transition:.15s;}
+  .field input:focus, .field select:focus, .field textarea:focus{outline:none;border-color:var(--gold-500);
+    background:#fff;}
+  .btn-primary{width:100%;padding:12px;background:var(--navy-800);color:#fff;border-radius:10px;
+    font-weight:700;font-size:15px;transition:.15s;}
+  .btn-primary:hover{background:var(--navy-900);}
+  .btn-gold{background:var(--gold-500);color:var(--navy-900);}
+  .btn-gold:hover{background:var(--gold-600);}
+  .error-box{background:#fdeceb;color:var(--danger);padding:10px 14px;border-radius:8px;font-size:13px;
+    margin-bottom:16px;text-align:center;}
+  .demo-box{margin-top:22px;background:var(--sand-100);border-radius:10px;padding:12px 14px;font-size:11.5px;
+    color:var(--navy-800);line-height:1.9;}
+  .demo-box b{color:var(--navy-900);}
+
+  /* ---------- Shell ---------- */
+  .shell{display:flex;min-height:100vh;}
+  .sidebar{width:250px;background:linear-gradient(180deg,var(--navy-900),var(--navy-800));color:#fff;
+    display:flex;flex-direction:column;flex-shrink:0;}
+  .sidebar-head{padding:22px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,.1);}
+  .sidebar-head img{height:34px;filter:brightness(0) invert(1);}
+  .sidebar-head span{font-weight:800;font-size:15px;}
+  .nav{flex:1;overflow-y:auto;padding:14px 10px;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;color:#dfe6f2;
+    font-size:14px;font-weight:600;margin-bottom:4px;transition:.15s;background:transparent;width:100%;text-align:right;}
+  .nav-item:hover{background:rgba(255,255,255,.08);}
+  .nav-item.active{background:var(--gold-500);color:var(--navy-900);}
+  .sidebar-foot{padding:16px;border-top:1px solid rgba(255,255,255,.1);}
+  .user-chip{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .avatar{width:34px;height:34px;border-radius:50%;background:var(--gold-500);color:var(--navy-900);
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;}
+  .user-chip div .name{font-size:13px;font-weight:700;}
+  .user-chip div .role{font-size:11px;color:#b9c4da;}
+  .logout-btn{width:100%;padding:9px;background:rgba(255,255,255,.08);color:#fff;border-radius:8px;font-size:13px;font-weight:600;}
+  .logout-btn:hover{background:rgba(255,255,255,.16);}
+
+  .main{flex:1;min-width:0;padding:26px 30px;overflow-y:auto;}
+  .page-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:12px;}
+  .page-head h2{font-size:22px;font-weight:800;color:var(--navy-900);margin:0;display:flex;align-items:center;gap:10px;}
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:24px;}
+  .stat-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;position:relative;overflow:hidden;}
+  .stat-card::before{content:"";position:absolute;top:0;right:0;width:5px;height:100%;background:var(--gold-500);}
+  .stat-card .num{font-size:26px;font-weight:800;color:var(--navy-900);}
+  .stat-card .lbl{font-size:12.5px;color:var(--muted);margin-top:4px;}
+
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:20px;}
+  .card h3{margin:0 0 14px;font-size:15px;font-weight:800;color:var(--navy-900);}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  thead th{text-align:right;padding:10px 12px;color:var(--navy-800);font-weight:700;border-bottom:2px solid var(--sand-100);
+    background:var(--sand-50);white-space:nowrap;}
+  tbody td{padding:10px 12px;border-bottom:1px solid var(--sand-100);vertical-align:middle;}
+  tbody tr:hover{background:var(--sand-50);}
+  .table-wrap{overflow-x:auto;}
+  .row-photo{width:32px;height:32px;border-radius:50%;object-fit:cover;background:var(--sand-100);}
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;}
+  .badge.gray{background:#eef0f3;color:#555;}
+  .badge.green{background:#e5f5ec;color:var(--success);}
+  .badge.red{background:#fdeceb;color:var(--danger);}
+  .badge.gold{background:#fff3d1;color:var(--warn);}
+  .badge.blue{background:#e6eefc;color:var(--navy-700);}
+
+  .icon-btn{background:transparent;color:var(--navy-700);font-size:13px;padding:5px 8px;border-radius:6px;}
+  .icon-btn:hover{background:var(--sand-100);}
+  .icon-btn.del{color:var(--danger);}
+
+  .empty-state{text-align:center;padding:40px 20px;color:var(--muted);}
+  .empty-state .big{font-size:34px;margin-bottom:8px;}
+
+  /* modal */
+  .modal-bg{position:fixed;inset:0;background:rgba(12,20,38,.55);display:flex;align-items:center;justify-content:center;
+    z-index:50;padding:20px;}
+  .modal{background:#fff;border-radius:16px;width:100%;max-width:520px;max-height:88vh;overflow-y:auto;padding:26px;}
+  .modal h3{margin:0 0 18px;font-size:17px;font-weight:800;color:var(--navy-900);}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .form-grid .full{grid-column:1/-1;}
+  .modal-actions{display:flex;gap:10px;margin-top:20px;}
+  .btn-secondary{flex:1;padding:11px;background:var(--sand-100);color:var(--navy-800);border-radius:10px;font-weight:700;font-size:14px;}
+  .btn-secondary:hover{background:var(--line);}
+  .modal-actions .btn-primary{flex:1;}
+  .photo-preview{width:64px;height:64px;border-radius:50%;object-fit:cover;background:var(--sand-100);margin-bottom:8px;display:block;}
+
+  .areas-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;}
+  .area-chip{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;}
+  .area-chip .cnt{font-size:20px;font-weight:800;color:var(--navy-800);}
+  .area-chip .nm{font-size:12.5px;color:var(--muted);margin-top:3px;}
+
+  .split-two{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  @media (max-width:900px){.split-two{grid-template-columns:1fr;} .form-grid{grid-template-columns:1fr;}}
+  @media (max-width:760px){.sidebar{position:fixed;right:0;top:0;bottom:0;z-index:40;transform:translateX(100%);transition:.2s;}
+    .sidebar.open{transform:translateX(0);} .main{padding:18px;} .menu-toggle{display:inline-flex !important;}}
+  .menu-toggle{display:none;background:var(--navy-900);color:#fff;padding:8px 10px;border-radius:8px;font-size:16px;}
+  .assumption-note{background:#fff3d1;border:1px solid #f0d98a;color:var(--warn);font-size:12px;padding:10px 14px;
+    border-radius:10px;margin-bottom:18px;}
+
+  /* ---------------- Analytics / لوحات تحليل البيانات ---------------- */
+  .board-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;}
+  .board-tab{padding:9px 16px;border-radius:20px;background:#fff;border:1.5px solid var(--line);color:var(--navy-800);
+    font-size:13px;font-weight:700;}
+  .board-tab.active{background:var(--navy-800);color:#fff;border-color:var(--navy-800);}
+  .analytics-filterbar{display:flex;gap:10px;flex-wrap:wrap;flex:1;}
+  .analytics-filter{padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:13px;background:#fff;
+    color:var(--navy-800);min-width:140px;}
+  .widgets-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;}
+  .widget-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;text-align:right;}
+  .widget-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;}
+  .widget-head h4{margin:0;font-size:14px;font-weight:800;color:var(--navy-900);}
+  .add-widget-card{display:flex;align-items:center;justify-content:center;flex-direction:column;background:var(--sand-100);
+    border:1.5px dashed var(--gold-500);color:var(--gold-600);font-weight:700;font-size:13.5px;min-height:120px;
+    text-align:center;line-height:1.9;}
+  .add-widget-card:hover{background:#fff3d1;}
+  .pie-wrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+  .pie-donut-wrap{position:relative;width:120px;height:120px;flex-shrink:0;}
+  .pie-donut{width:100%;height:100%;border-radius:50%;}
+  .pie-hole{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:56px;height:56px;
+    border-radius:50%;background:#fff;}
+  .pie-legend{flex:1;min-width:140px;}
+  .legend-row{display:flex;align-items:center;gap:8px;font-size:12.5px;margin-bottom:6px;}
+  .legend-row .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+  .legend-row .legend-lbl{flex:1;color:var(--ink);}
+  .legend-row .legend-val{color:var(--muted);font-weight:700;white-space:nowrap;}
+  .bar-wrap{display:flex;flex-direction:column;gap:10px;}
+  .bar-row{display:flex;align-items:center;gap:10px;font-size:12.5px;}
+  .bar-lbl{width:90px;flex-shrink:0;color:var(--navy-800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .bar-track{flex:1;height:16px;background:var(--sand-100);border-radius:8px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:8px;}
+  .bar-val{width:34px;text-align:left;font-weight:700;color:var(--navy-900);}
+  .stat-number{font-size:44px;font-weight:800;color:var(--navy-900);text-align:center;padding:20px 0;}
+  .empty-mini{color:var(--muted);font-size:12.5px;text-align:center;padding:20px 0;}
+
+  /* ---------------- الإسكان (Trips -> Hotels -> Rooms -> Guests) ---------------- */
+  .crumbs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px;font-size:13px;color:var(--navy-800);}
+  .crumbs button{background:transparent;color:var(--navy-700);font-weight:700;padding:4px 8px;border-radius:6px;}
+  .crumbs button:hover{background:var(--sand-100);}
+  .crumbs .sep{color:var(--muted);}
+  .click-card{cursor:pointer;transition:.15s;}
+  .click-card:hover{box-shadow:0 6px 16px rgba(12,31,61,.12);transform:translateY(-2px);}
+  .progress-track{height:8px;background:var(--sand-100);border-radius:6px;overflow:hidden;margin-top:8px;}
+  .progress-fill{height:100%;border-radius:6px;background:var(--navy-600);}
+
+  /* ---------------- شيت البيانات القابل للتعديل المباشر ---------------- */
+  .cell-input{width:100%;padding:6px 8px;border:1px solid transparent;border-radius:6px;background:transparent;font-size:13px;}
+  .cell-input:hover{border-color:var(--line);}
+  .cell-input:focus{outline:none;border-color:var(--gold-500);background:#fff;}
+  .sheet-toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+  .sheet-toolbar a.icon-btn{text-decoration:none;display:inline-flex;align-items:center;}
+  /* ---------------- PR team hierarchy ---------------- */
+  .pr-team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;}
+  .pr-team-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;cursor:pointer;transition:.15s;}
+  .pr-team-card:hover{box-shadow:0 8px 20px rgba(12,31,61,.12);transform:translateY(-2px);}
+  .pr-team-card .team-title{font-size:16px;font-weight:800;color:var(--navy-900);margin-bottom:8px;}
+  .pr-team-card .team-meta{font-size:12px;color:var(--muted);line-height:1.8;}
+  .member-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;}
+  .member-card{background:#fff;border:1px solid var(--line);border-radius:15px;padding:16px;cursor:pointer;}
+  .member-card:hover{box-shadow:0 7px 18px rgba(12,31,61,.11);}
+  .member-card .member-name{font-weight:800;color:var(--navy-900);font-size:15px;}
+  .member-card .member-role{font-size:11.5px;color:var(--muted);margin-top:3px;}
+  .member-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:12px;}
+  .member-stat{background:var(--sand-50);border-radius:9px;padding:8px;text-align:center;}
+  .member-stat b{display:block;font-size:16px;color:var(--navy-800);}
+  .member-stat span{font-size:10px;color:var(--muted);}
+  .detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;}
+  .detail-item{background:var(--sand-50);border-radius:10px;padding:11px;}
+  .detail-item .k{font-size:11px;color:var(--muted);margin-bottom:3px;}
+  .detail-item .v{font-size:13px;font-weight:700;word-break:break-word;}
+  .link-box{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;}
+  .link-box a{color:var(--navy-700);font-weight:700;text-decoration:none;}
+</style>
+
+<script>
+(function(){
+  const LOGO = "data:image/png;base64,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";
+
+  /* ---------------- Google Sheets auth ---------------- */
+  // النظام يعمل بدون Supabase. الحسابات والبيانات تُحفظ في Google Sheets.
+  // يتم إنشاء حساب مدير افتراضي عند أول تشغيل: admin / admin123
+  async function sha256(text){
+    const data = new TextEncoder().encode(String(text));
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+  const DEFAULT_ADMIN = {id:'admin-001', name:'مدير النظام', username:'admin', passwordHash:'240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', role:'admin', status:'active'};
+  const ROLE_LABELS = {
+    admin:'مدير النظام', hr:'HR',
+    pr_manager:'المدير العام للعلاقات العامة',
+    pr_leader:'Team Leader - العلاقات العامة',
+    pr_member:'عضو فريق - العلاقات العامة',
+    pr_out:'علاقات عامة - أوت دور', pr_in:'علاقات عامة - إن دور',
+    reception:'استقبال', accounting:'حسابات', callcenter:'كول سنتر', accommodation:'تسكين', system:'حجوزات النظام',
+    analyst:'مسؤول تحليل البيانات'
+  };
+
+  const ALEX_AREAS = ['سيدي جابر','سموحة','ستانلي','جليم','لوران','رشدي','الإبراهيمية','فلمنج','محرم بك',
+    'كرموز','العطارين','المنشية','باكوس','العجمي','المندرة','أبو قير','سيدي بشر','المعمورة','برج العرب','الأزاريطة'];
+
+  /* ---------------- Module definitions (generic CRUD engine) ---------------- */
+  const MODULES = {
+    teams:{ title:'الفرق', icon:'🧩', roles:['admin','hr','pr_manager'],
+      fields:[
+        {key:'name', label:'اسم الفريق', type:'text', required:true},
+        {key:'department', label:'القسم', type:'select', options:Object.values(ROLE_LABELS)},
+        {key:'leader', label:'قائد الفريق (Team Leader)', type:'dynamicSelect', ref:'employees', refField:'name'},
+        {key:'notes', label:'ملاحظات', type:'textarea'},
+      ]},
+    employees:{ title:'الموظفون', icon:'👥', roles:['admin','hr','pr_manager','pr_leader','pr_member'],
+      fields:[
+        {key:'photo', label:'الصورة', type:'image'},
+        {key:'name', label:'الاسم', type:'text', required:true},
+        {key:'specialNumber', label:'الرقم الخاص', type:'text'},
+        {key:'companyNumber', label:'رقم الشركة', type:'text'},
+        {key:'department', label:'القسم', type:'select', options:Object.values(ROLE_LABELS)},
+        {key:'team', label:'الفريق', type:'dynamicSelect', ref:'teams', refField:'name'},
+        {key:'phone', label:'رقم الهاتف', type:'text'},
+        {key:'address', label:'العنوان', type:'text'},
+        {key:'hireDate', label:'تاريخ التعيين', type:'date'},
+        {key:'salary', label:'الراتب', type:'number'},
+        {key:'username', label:'اسم المستخدم', type:'readonly'},
+        {key:'status', label:'حالة الموظف', type:'select', options:['active','inactive']},
+      ]},
+    companies:{ title:'الشركات (أوت دور)', icon:'🏢', roles:['admin','pr_out'],
+      fields:[
+        {key:'name', label:'اسم الشركة', type:'text', required:true},
+        {key:'area', label:'الحي / المنطقة', type:'select', options:ALEX_AREAS},
+        {key:'contactName', label:'اسم المسؤول', type:'text'},
+        {key:'contactPhone', label:'رقم المسؤول', type:'text'},
+        {key:'responsiblePerson', label:'مندوب العلاقات العامة المسؤول', type:'dynamicSelect',
+          ref:'employees', refField:'name', filter:{field:'department', value:'علاقات عامة - أوت دور'}},
+        {key:'details', label:'تفاصيل', type:'textarea'},
+      ]},
+    visits:{ title:'تقارير الزيارات', icon:'📋', roles:['admin','pr_out'],
+      fields:[
+        {key:'companyName', label:'الشركة', type:'dynamicSelect', ref:'companies', refField:'name', required:true},
+        {key:'visitedBy', label:'المندوب اللي عمل الزيارة', type:'dynamicSelect',
+          ref:'employees', refField:'name', filter:{field:'department', value:'علاقات عامة - أوت دور'}},
+        {key:'date', label:'تاريخ الزيارة', type:'date'},
+        {key:'status', label:'حالة الزيارة', type:'select',
+          options:['تم التواصل','لم تتم الزيارة','تم تحديد معاد','تم الرفض','تحت التفاوض','لم يتم التوصل لأي شيء']},
+        {key:'notes', label:'ملاحظات', type:'textarea'},
+      ]},
+    indoor_leads:{ title:'المهتمون والمندوبين', icon:'🎯', roles:['admin','pr_in','pr_manager','pr_leader','pr_member'],
+      fields:[
+        {key:'name', label:'الاسم', type:'text', required:true},
+        {key:'phone', label:'رقم الهاتف', type:'text'},
+        {key:'type', label:'النوع', type:'select', options:['مهتم','مندوب']},
+        {key:'company', label:'الشركة', type:'dynamicSelect', ref:'companies', refField:'name'},
+        {key:'status', label:'الحالة', type:'select', options:['جديد','تم التواصل','تحويل لحجز','مشترك']},
+        {key:'sourceType', label:'جاي عن طريق', type:'select',
+          options:['مندوب','علاقات عامة','ريسبشن','ميديا']},
+        {key:'responsiblePerson', label:'اسم المسؤول عنه', type:'dynamicSelect', ref:'employees', refField:'name'},
+        {key:'managerRep', label:'شغال تحت إشراف مندوب', type:'dynamicSelect',
+          ref:'indoor_leads', refField:'name', filter:{field:'type', value:'مندوب'}},
+        {key:'notes', label:'ملاحظات', type:'textarea'},
+      ]},
+    indoor_data:{ title:'الداتا والأرقام', icon:'📊', roles:['admin','pr_in','pr_manager','pr_leader','pr_member'],
+      fields:[
+        {key:'name', label:'الاسم', type:'text'},
+        {key:'phone', label:'رقم الهاتف', type:'text', required:true},
+        {key:'source', label:'مصدر الرقم', type:'text'},
+        {key:'responsiblePerson', label:'المندوب المسؤول', type:'dynamicSelect',
+          ref:'employees', refField:'name', filter:{field:'department', value:'علاقات عامة - إن دور'}},
+        {key:'notes', label:'ملاحظات', type:'textarea'},
+      ]},
+    reception_desk:{ title:'الريسبشن', icon:'🛎️', roles:['admin','reception'],
+      fields:[
+        {key:'visitorName', label:'اسم الزائر', type:'text', required:true},
+        {key:'phone', label:'رقم الهاتف', type:'text'},
+        {key:'purpose', label:'الغرض من الزيارة', type:'text'},
+        {key:'time', label:'الوقت', type:'text'},
+        {key:'notes', label:'ملاحظات', type:'textarea'},
+      ]},
+    reception_media:{ title:'استقبال ميديا', icon:'💬', roles:['admin','reception'],
+      fields:[
+        {key:'name', label:'الاسم', type:'text', required:true},
+        {key:'phone', label:'رقم الهاتف', type:'text'},
+        {key:'platform', label:'المنصة', type:'select', options:['فيسبوك','انستجرام','واتساب','غير ذلك']},
+        {key:'inquiry', label:'الاستفسار', type:'textarea'},
+      ]},
+
+    callcenter_feedback:{ title:'فيدباك عملاء العمرة', icon:'📞', roles:['admin','callcenter'],
+      fields:[
+        {key:'clientName', label:'اسم العميل', type:'text', required:true},
+        {key:'phone', label:'رقم الهاتف', type:'text'},
+        {key:'tripDate', label:'تاريخ الرحلة', type:'date'},
+        {key:'rating', label:'التقييم', type:'select', options:['5','4','3','2','1']},
+        {key:'feedback', label:'الفيدباك', type:'textarea'},
+      ]},
+    callcenter_payments:{ title:'متابعة المتأخرين في السداد', icon:'⏰', roles:['admin','callcenter'],
+      fields:[
+        {key:'clientName', label:'اسم العميل', type:'text', required:true},
+        {key:'phone', label:'رقم الهاتف', type:'text'},
+        {key:'amountDue', label:'المبلغ المتأخر', type:'number'},
+        {key:'lastContactDate', label:'آخر متابعة', type:'date'},
+        {key:'notes', label:'ملاحظات', type:'textarea'},
+      ]},
+    accommodation:{ title:'التسكين', icon:'🏨', roles:['admin','accommodation','system'],
+      fields:[
+        {key:'clientName', label:'اسم العميل', type:'text', required:true},
+        {key:'passportNumber', label:'رقم الجواز', type:'text'},
+        {key:'trip', label:'الرحلة', type:'text'},
+        {key:'daysRemaining', label:'المتبقي (أيام)', type:'number'},
+        {key:'roomOccupants', label:'عدد أفراد الأوضة', type:'number'},
+        {key:'hotel', label:'الفندق', type:'text'},
+        {key:'flightStatus', label:'حالة حجز الطيران', type:'select', options:['لم يُحجز','تم الحجز']},
+      ]},
+
+    /* ---------------- علاقات عامة: هيكل الفرق والاشتراكات ---------------- */
+    pr_member_data:{ title:'داتا ولينكات أعضاء العلاقات العامة', icon:'🔗', roles:['admin','pr_manager','pr_leader','pr_member'],
+      fields:[
+        {key:'memberId', label:'عضو الفريق', type:'dynamicSelect', ref:'employees', refField:'name'},
+        {key:'title', label:'اسم الداتا / اللينك', type:'text', required:true},
+        {key:'link', label:'الرابط', type:'url'},
+        {key:'data', label:'تفاصيل الداتا', type:'textarea'},
+        {key:'notes', label:'ملاحظات', type:'textarea'},
+      ]},
+
+    subscriptions:{ title:'الاشتراكات', icon:'💳', roles:['admin','pr_manager','pr_leader','pr_member'],
+      fields:[
+        {key:'leadId', label:'معرّف المهتم', type:'readonly'},
+        {key:'customerName', label:'اسم العميل', type:'text', required:true},
+        {key:'phone', label:'رقم الهاتف', type:'text'},
+        {key:'responsiblePerson', label:'المسؤول', type:'dynamicSelect', ref:'employees', refField:'name'},
+        {key:'subscriptionDate', label:'تاريخ الاشتراك', type:'date', required:true},
+        {key:'packageType', label:'نوع الباقة', type:'select',
+          options:['','عمرة كاش','عمرة قسط','عمرة تيسير','تيسير رمضان','حج قرعة تيسير','حج قرعة عادي','حج سياحي']},
+        {key:'subscriptionStatus', label:'حالة الاشتراك', type:'select', options:['نشط','مكتمل','ملغي']},
+        {key:'notes', label:'ملاحظات', type:'textarea'},
+      ]},
+  };
+
+  const LEDGER_FIELDS = [
+    {key:'clientName', label:'اسم العميل', type:'text', required:true},
+    {key:'date', label:'التاريخ', type:'date', required:true},
+    {key:'description', label:'البيان', type:'text'},
+    {key:'packageType', label:'نوع الباقة', type:'select',
+      options:['','عمرة كاش','عمرة قسط','عمرة تيسير','تيسير رمضان','حج قرعة تيسير','حج قرعة عادي','حج سياحي']},
+    {key:'debit', label:'مدين (على العميل)', type:'number'},
+    {key:'credit', label:'دائن (مدفوع من العميل)', type:'number'},
+  ];
+
+  /* ---------------- Google Sheets backend ---------------- */
+  const GOOGLE_SHEETS_WEBHOOK = 'https://script.google.com/macros/s/AKfycby9JiJxKqWWcl-JC4O6VaDZzJafPIDMg5CLdBZUt4dhOWKHLMfgzV58TUjqGMouZgnG/exec';
+  let HOMSA_SESSION = localStorage.getItem('homsa_session_token') || '';
+
+  async function sheetRequest(action, table, payload){
+    if(!GOOGLE_SHEETS_WEBHOOK) throw new Error('رابط Google Sheets غير مضبوط');
+    if(!HOMSA_SESSION) throw new Error('انتهت جلسة الدخول — سجّل الدخول مرة أخرى');
+    if(action==='list'){
+      const u = new URL(GOOGLE_SHEETS_WEBHOOK);
+      u.searchParams.set('action','list');
+      u.searchParams.set('table',table);
+      u.searchParams.set('session',HOMSA_SESSION);
+      const r=await fetch(u.toString(),{cache:'no-store'});
+      const data=await r.json();
+      if(!data.ok) {
+        if(data.error==='Unauthorized'){ HOMSA_SESSION=''; localStorage.removeItem('homsa_session_token'); }
+        throw new Error(data.error||'فشل تحميل البيانات من Google Sheets');
+      }
+      return data.rows||[];
+    }
+    const r=await fetch(GOOGLE_SHEETS_WEBHOOK,{method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action,table,payload,session:HOMSA_SESSION,at:new Date().toISOString()}),
+      keepalive:true});
+    const data=await r.json().catch(()=>({ok:true}));
+    if(!data.ok) throw new Error(data.error||'فشل حفظ البيانات في Google Sheets');
+    return data;
+  }
+
+  /* ---------------- Storage helpers ---------------- */
+  async function loadList(key){
+    try{ return await sheetRequest('list',key); }
+    catch(e){ console.error('Google Sheets load error', key, e); return []; }
+  }
+
+  async function apiAdd(table, record){
+    if(!record.id) record.id=uid();
+    await sheetRequest('upsert',table,record);
+    return record;
+  }
+
+  async function apiUpdate(table, record){
+    await sheetRequest('upsert',table,record);
+  }
+
+  async function apiDelete(table, id){
+    await sheetRequest('delete',table,{id});
+  }
+
+  const cache = {};
+  async function getData(key){ if(!cache[key]) cache[key] = await loadList(key); return cache[key]; }
+  function invalidate(key){ cache[key] = null; }
+
+  /* ---------------- App state ---------------- */
+  let state = { user:null, view:'dashboard', sidebarOpen:false, modal:null };
+
+  const root = document.getElementById('app-root');
+
+  function uid(){ return 'id'+Math.random().toString(36).slice(2,10); }
+  function esc(s){ return (s===undefined||s===null)?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+
+  /* ---------------- PR access control ---------------- */
+  function isPRUser(){ return ['pr_manager','pr_leader','pr_member'].includes(state.user?.role); }
+  function currentEmployee(){
+    if(!state.user) return null;
+    const list = cache.employees || [];
+    return list.find(e => (e.username && state.user.username && String(e.username).toLowerCase()===String(state.user.username).toLowerCase())
+      || e.id===state.user.employeeId) || null;
+  }
+  async function currentEmployeeFresh(){
+    const emps=await getData('employees');
+    return emps.find(e => (e.username && state.user.username && String(e.username).toLowerCase()===String(state.user.username).toLowerCase())
+      || e.id===state.user.employeeId) || null;
+  }
+  async function prTeamName(){
+    const emp=await currentEmployeeFresh();
+    return emp?.team || state.user?.team || '';
+  }
+  async function prTeamMembers(){
+    const emps=await getData('employees');
+    if(state.user.role==='pr_manager') return emps.filter(e=>e.status!=='inactive');
+    const team=await prTeamName();
+    return emps.filter(e=>e.status!=='inactive' && e.team===team);
+  }
+  async function prAllowedNames(){
+    const members=await prTeamMembers();
+    return new Set(members.map(e=>e.name).filter(Boolean));
+  }
+  async function filterPRData(key,data){
+    if(!isPRUser()) return data;
+    if(state.user.role==='pr_manager') return data;
+    const emp=await currentEmployeeFresh();
+    const myName=emp?.name || state.user.name;
+    const teamNames=await prAllowedNames();
+    if(key==='employees') return data.filter(r=>teamNames.has(r.name));
+    if(key==='teams') {
+      const team=await prTeamName();
+      return data.filter(r=>r.name===team);
+    }
+    if(key==='indoor_leads' || key==='indoor_data' || key==='subscriptions'){
+      return data.filter(r=>teamNames.has(r.responsiblePerson) && (state.user.role==='pr_leader' || r.responsiblePerson===myName));
+    }
+    if(key==='pr_member_data'){
+      return data.filter(r=>teamNames.has(r.memberId) && (state.user.role==='pr_leader' || r.memberId===myName));
+    }
+    return data;
+  }
+  function prCanEditRow(key,row){
+    if(!isPRUser()) return true;
+    if(state.user.role==='pr_manager') return true;
+    const myName = currentEmployee()?.name || state.user.name;
+    if(state.user.role==='pr_leader'){
+      if(['indoor_leads','indoor_data','subscriptions'].includes(key)) return true;
+      if(key==='pr_member_data') return true;
+      return false;
+    }
+    if(key==='indoor_leads' || key==='indoor_data' || key==='subscriptions') return !row?.id || row.responsiblePerson===myName;
+    if(key==='pr_member_data') return !row?.id || row.memberId===myName;
+    return key==='employees' && row?.name===myName;
+  }
+  async function maybeCreateSubscriptionFromLead(lead){
+    if(lead.type!=='مهتم' || lead.status!=='مشترك') return;
+    const subs=await getData('subscriptions');
+    if(subs.some(s=>String(s.leadId||'')===String(lead.id))) return;
+    const sub={
+      id:uid(), leadId:lead.id, customerName:lead.name||'', phone:lead.phone||'',
+      responsiblePerson:lead.responsiblePerson||'', subscriptionDate:new Date().toISOString().slice(0,10),
+      packageType:'', subscriptionStatus:'نشط', notes:lead.notes||''
+    };
+    await apiAdd('subscriptions',sub);
+    invalidate('subscriptions');
+  }
+
+  /* ---------------- Render router ---------------- */
+  async function render(){
+    if(!state.user){ renderLogin(); return; }
+    await renderShell();
+  }
+
+  function renderLogin(){
+    root.innerHTML = `
+      <div class="login-wrap">
+        <div class="login-card">
+          <div class="arch-top"><img src="${LOGO}" alt="همسة"/></div>
+          <div class="login-body">
+            <h1>نظام إدارة همسة للسياحة</h1>
+            <p class="sub">سجّل دخولك للمتابعة</p>
+            ${state.loginError? `<div class="error-box">${esc(state.loginError)}</div>`:''}
+            <form id="login-form">
+              <div class="field"><label>اسم المستخدم</label><input id="login-u" type="text" autocomplete="username" required/></div>
+              <div class="field"><label>كلمة المرور</label><input id="login-p" type="password" autocomplete="current-password" required/></div>
+              <button class="btn-primary btn-gold" type="submit">تسجيل الدخول</button>
+            </form>
+            <div class="demo-box">
+              <b>تنبيه:</b><br/>لا يوجد تسجيل ذاتي للموظفين. المدير أو مسؤول HR هو من ينشئ حساب الموظف ويحدد اسم المستخدم وكلمة المرور والصلاحية.<br/><b>أول دخول:</b> admin / admin123
+            </div>
+          </div>
+        </div>
+      </div>`;
+    document.getElementById('login-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const btn = e.target.querySelector('button[type=submit]');
+      const u = document.getElementById('login-u').value.trim().toLowerCase();
+      const p = document.getElementById('login-p').value;
+      btn.textContent = 'جارٍ الدخول...'; btn.disabled = true;
+      try{
+        const url = new URL(GOOGLE_SHEETS_WEBHOOK);
+        url.searchParams.set('action','login');
+        url.searchParams.set('username',u);
+        url.searchParams.set('password',p);
+        const response = await fetch(url.toString(),{cache:'no-store'});
+        const data = await response.json();
+        if(!data.ok) throw new Error(data.error||'اسم المستخدم أو كلمة المرور غير صحيحة');
+        HOMSA_SESSION=data.session;
+        localStorage.setItem('homsa_session_token',HOMSA_SESSION);
+        state.user = data.user; state.loginError=null; state.view='dashboard';
+        localStorage.setItem('homsa_session_user', JSON.stringify(data.user));
+        render();
+      }catch(err){
+        console.error('Login error', err);
+        state.loginError = err.message || 'تعذر تسجيل الدخول';
+        renderLogin();
+      }
+    });
+  }
+
+
+  function accessibleModules(){
+    if(state.user?.role==='pr_manager') {
+      return Object.entries(MODULES).filter(([k,m])=>m.roles.includes('pr_manager'));
+    }
+    if(state.user?.role==='pr_leader' || state.user?.role==='pr_member') {
+      return Object.entries(MODULES).filter(([k,m])=>m.roles.includes(state.user.role));
+    }
+    return Object.entries(MODULES).filter(([k,m])=>m.roles.includes(state.user.role));
+  }
+
+  function analyticsAccessibleModules(){
+    // مسؤول تحليل البيانات (analyst) والمدير يقدروا يبنوا لوحات تحليل من أي قسم في النظام
+    if(state.user.role==='admin' || state.user.role==='analyst') return Object.entries(MODULES);
+    return accessibleModules();
+  }
+
+  async function getSetting(key){
+    const rows = await getData('app_settings');
+    const row = rows.find(r=>r.key===key);
+    return row? (row.value||'') : '';
+  }
+  async function setSetting(key, value){
+    const rows = await getData('app_settings');
+    const row = rows.find(r=>r.key===key);
+    const rec = row? {...row, value} : {id:'cfg_'+key, key, value};
+    await apiAdd('app_settings', rec);
+    invalidate('app_settings');
+  }
+
+  async function renderShell(){
+    const mods = accessibleModules();
+    const navItems = [
+      `<button class="nav-item ${state.view==='dashboard'?'active':''}" data-view="dashboard">🏠<span>الرئيسية</span></button>`,
+      `<button class="nav-item ${state.view==='analytics'?'active':''}" data-view="analytics">📊<span>تحليل البيانات</span></button>`,
+    ];
+    if(state.user.role==='admin' || state.user.role==='pr_out'){
+      navItems.push(`<button class="nav-item ${state.view==='areas'?'active':''}" data-view="areas">🗺️<span>مناطق الإسكندرية</span></button>`);
+    }
+    if(state.user.role==='admin' || state.user.role==='accounting'){
+      navItems.push(`<button class="nav-item ${state.view==='ledger'?'active':''}" data-view="ledger">💰<span>كشف الحساب</span></button>`);
+    }
+    if(isPRUser()){
+      navItems.push(`<button class="nav-item ${state.view==='pr_teams'?'active':''}" data-view="pr_teams">🧩<span>${state.user.role==='pr_member'?'بياناتي':'فرق العلاقات العامة'}</span></button>`);
+    }
+    mods.forEach(([k,m])=>{
+      navItems.push(`<button class="nav-item ${state.view===k?'active':''}" data-view="${k}">${m.icon}<span>${esc(m.title)}</span></button>`);
+    });
+
+    root.innerHTML = `
+      <div class="shell">
+        <div class="sidebar ${state.sidebarOpen?'open':''}">
+          <div class="sidebar-head"><img src="${LOGO}"/><span>همسة للسياحة</span></div>
+          <div class="nav">${navItems.join('')}</div>
+          <div class="sidebar-foot">
+            <div class="user-chip">
+              <div class="avatar">${esc(state.user.name[0])}</div>
+              <div><div class="name">${esc(state.user.name)}</div><div class="role">${esc(ROLE_LABELS[state.user.role])}</div></div>
+            </div>
+            <button class="logout-btn" id="account-btn" style="margin-bottom:6px;background:#3a3a3a;">تغيير بيانات الدخول</button>
+            <button class="logout-btn" id="logout-btn">تسجيل الخروج</button>
+          </div>
+        </div>
+        <div class="main">
+          <button class="menu-toggle" id="menu-toggle">☰ القائمة</button>
+          <div id="page"></div>
+        </div>
+      </div>`;
+
+    root.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click', ()=>{ state.view=b.dataset.view; state.sidebarOpen=false; render(); }));
+    document.getElementById('logout-btn').addEventListener('click', ()=>{ localStorage.removeItem('homsa_session_user'); localStorage.removeItem('homsa_session_token'); HOMSA_SESSION=''; state.user=null; state.view='dashboard'; render(); });
+    document.getElementById('account-btn').addEventListener('click', openChangeAccountForm);
+    document.getElementById('menu-toggle').addEventListener('click', ()=>{ state.sidebarOpen=!state.sidebarOpen; render(); });
+
+    const page = document.getElementById('page');
+    if(state.view==='dashboard') await renderDashboard(page, mods);
+    else if(state.view==='pr_teams') await renderPRHierarchy(page);
+    else if(state.view==='analytics') await renderAnalytics(page, analyticsAccessibleModules());
+    else if(state.view==='areas') await renderAreas(page);
+    else if(state.view==='ledger') await renderLedger(page);
+    else if(state.view==='accommodation') await renderAccommodationHub(page);
+    else if(state.view==='indoor_data') await renderIndoorDataSheet(page);
+    else if(MODULES[state.view]) await renderModule(page, state.view);
+  }
+
+  async function renderDashboard(page, mods){
+    const isAdmin = state.user.role==='admin';
+    let statsHtml = '';
+    if(isPRUser()){
+      const members=await prTeamMembers();
+      const leads=await filterPRData('indoor_leads', await getData('indoor_leads'));
+      const subs=await filterPRData('subscriptions', await getData('subscriptions'));
+      statsHtml = `<div class="stat-grid">
+        <div class="stat-card"><div class="num">${members.length}</div><div class="lbl">${state.user.role==='pr_member'?'بياناتي':'أعضاء الفريق'}</div></div>
+        <div class="stat-card"><div class="num">${leads.filter(x=>x.type==='مهتم').length}</div><div class="lbl">المهتمون المسموح برؤيتهم</div></div>
+        <div class="stat-card"><div class="num">${leads.filter(x=>x.type==='مندوب').length}</div><div class="lbl">المندوبون</div></div>
+        <div class="stat-card"><div class="num">${subs.length}</div><div class="lbl">الاشتراكات</div></div>
+      </div>`;
+    } else if(isAdmin){
+      const emp = await getData('employees');
+      const comp = await getData('companies');
+      const acc = await getData('accounting');
+      statsHtml = `<div class="stat-grid">
+        <div class="stat-card"><div class="num">${emp.length}</div><div class="lbl">إجمالي الموظفين</div></div>
+        <div class="stat-card"><div class="num">${comp.length}</div><div class="lbl">الشركات المسجلة</div></div>
+        <div class="stat-card"><div class="num">${acc.length}</div><div class="lbl">حالات الحسابات</div></div>
+        <div class="stat-card"><div class="num">${mods.length}</div><div class="lbl">الأقسام المتاحة</div></div>
+      </div>`;
+    }
+    page.innerHTML = `
+      <div class="page-head"><h2>مرحبًا، ${esc(state.user.name)} 👋</h2></div>
+      ${statsHtml}
+      <div class="assumption-note">نظام الصلاحيات الجديد يفصل بيانات العلاقات العامة حسب الفريق والعضو: المدير العام يرى الكل، الـTeam Leader يرى فريقه، وعضو الفريق يرى بياناته ومهتميه فقط.</div>
+      <div class="card"><h3>الأقسام المتاحة لك</h3>
+        <div class="areas-grid">
+          ${mods.map(([k,m])=>`<div class="area-chip" style="cursor:pointer" data-go="${k}"><div class="cnt">${m.icon}</div><div class="nm">${esc(m.title)}</div></div>`).join('')}
+        </div>
+      </div>`;
+    page.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click', ()=>{ state.view=el.dataset.go; render(); }));
+  }
+
+
+  async function renderPRHierarchy(page){
+    const teams=await getData('teams');
+    const members=await prTeamMembers();
+    const leads=await getData('indoor_leads');
+    const dataRows=await getData('pr_member_data');
+    const subs=await getData('subscriptions');
+    const teamNames=[...new Set(members.map(m=>m.team).filter(Boolean))];
+    const visibleTeams = state.user.role==='pr_manager' ? teams.filter(t=>t.department===ROLE_LABELS.pr_in || t.department==='علاقات عامة - إن دور' || teamNames.includes(t.name))
+      : teams.filter(t=>teamNames.includes(t.name));
+    if(state.user.role==='pr_member'){
+      const me=await currentEmployeeFresh();
+      const my=me?.name||state.user.name;
+      const mine=members.find(m=>m.name===my) || me || {name:my,team:await prTeamName()};
+      const myLeads=leads.filter(x=>x.responsiblePerson===my);
+      const myData=dataRows.filter(x=>x.memberId===my);
+      const mySubs=subs.filter(x=>x.responsiblePerson===my);
+      page.innerHTML=`
+        <div class="page-head"><h2>👤 بياناتي في العلاقات العامة</h2></div>
+        <div class="card">
+          <h3>${esc(mine.name||my)}</h3>
+          <div class="detail-grid">
+            <div class="detail-item"><div class="k">الفريق</div><div class="v">${esc(mine.team||'بدون فريق')}</div></div>
+            <div class="detail-item"><div class="k">الهاتف</div><div class="v">${esc(mine.phone||'—')}</div></div>
+            <div class="detail-item"><div class="k">عدد المهتمين</div><div class="v">${myLeads.filter(x=>x.type==='مهتم').length}</div></div>
+            <div class="detail-item"><div class="k">عدد المندوبين</div><div class="v">${myLeads.filter(x=>x.type==='مندوب').length}</div></div>
+            <div class="detail-item"><div class="k">الاشتراكات</div><div class="v">${mySubs.length}</div></div>
+          </div>
+        </div>
+        <div class="card"><div class="page-head"><h3>🔗 داتا ولينكاتي</h3><button class="btn-primary btn-gold" id="my-add-data" style="width:auto;padding:8px 15px;">+ إضافة</button></div>
+          ${myData.length?myData.map(x=>`<div class="link-box"><div><b>${esc(x.title)}</b>${x.data?`<div style="font-size:12px;color:var(--muted)">${esc(x.data)}</div>`:''}</div>${x.link?`<a href="${esc(x.link)}" target="_blank" rel="noopener">فتح الرابط ↗</a>`:''}</div>`).join(''):'<div class="empty-state">لا توجد داتا أو لينكات بعد</div>'}
+        </div>`;
+      document.getElementById('my-add-data').addEventListener('click',()=>openForm('pr_member_data',null));
+      return;
+    }
+
+    page.innerHTML=`
+      <div class="page-head"><h2>🧩 ${state.user.role==='pr_manager'?'فرق العلاقات العامة بالكامل':'فريقي'}</h2></div>
+      <div class="assumption-note">المدير العام للعلاقات العامة يرى كل الفرق. الـTeam Leader يرى أعضاء فريقه فقط، وكل بطاقة تفتح تفاصيل العضو والمهتمين والمندوبين والاشتراكات والداتا الخاصة به.</div>
+      <div class="pr-team-grid">
+        ${visibleTeams.map(t=>{
+          const tm=members.filter(m=>m.team===t.name);
+          return `<div class="pr-team-card" data-team="${esc(t.name)}"><div class="team-title">🧩 ${esc(t.name)}</div>
+            <div class="team-meta">القائد: ${esc(t.leader||'—')}<br/>عدد الأعضاء: ${tm.length}</div></div>`;
+        }).join('') || '<div class="empty-state">لا توجد فرق مرتبطة بك.</div>'}
+      </div>
+      <div class="card" id="pr-members-panel" style="margin-top:20px;">
+        <h3>👥 أعضاء الفريق</h3><div class="empty-state">اضغط على الفريق لعرض الأعضاء</div>
+      </div>`;
+
+    const showTeam=(team)=>{
+      const tm=members.filter(m=>m.team===team);
+      const panel=document.getElementById('pr-members-panel');
+      panel.innerHTML=`<h3>👥 أعضاء ${esc(team)}</h3><div class="member-grid">${tm.map(m=>{
+        const ml=leads.filter(x=>x.responsiblePerson===m.name);
+        const md=dataRows.filter(x=>x.memberId===m.name);
+        const ms=subs.filter(x=>x.responsiblePerson===m.name);
+        return `<div class="member-card" data-member="${esc(m.name)}">
+          <div class="member-name">${esc(m.name)}</div><div class="member-role">${esc(ROLE_LABELS[m.department]||m.department||'عضو فريق')}</div>
+          <div class="member-stats"><div class="member-stat"><b>${ml.filter(x=>x.type==='مهتم').length}</b><span>مهتمون</span></div>
+          <div class="member-stat"><b>${ml.filter(x=>x.type==='مندوب').length}</b><span>مندوبون</span></div>
+          <div class="member-stat"><b>${ms.length}</b><span>اشتراكات</span></div></div>
+        </div>`;
+      }).join('')||'<div class="empty-state">لا يوجد أعضاء</div>'}</div>`;
+      panel.querySelectorAll('[data-member]').forEach(c=>c.addEventListener('click',()=>showMember(c.dataset.member)));
+    };
+    const showMember=(name)=>{
+      const m=members.find(x=>x.name===name);
+      const ml=leads.filter(x=>x.responsiblePerson===name);
+      const md=dataRows.filter(x=>x.memberId===name);
+      const ms=subs.filter(x=>x.responsiblePerson===name);
+      const panel=document.getElementById('pr-members-panel');
+      panel.innerHTML=`<button class="icon-btn" id="back-members">→ رجوع للأعضاء</button>
+        <div class="card" style="margin-top:10px"><h3>👤 ${esc(name)}</h3>
+          <div class="detail-grid">
+            <div class="detail-item"><div class="k">الفريق</div><div class="v">${esc(m?.team||'—')}</div></div>
+            <div class="detail-item"><div class="k">الهاتف</div><div class="v">${esc(m?.phone||'—')}</div></div>
+            <div class="detail-item"><div class="k">المهتمون</div><div class="v">${ml.filter(x=>x.type==='مهتم').length}</div></div>
+            <div class="detail-item"><div class="k">المندوبون</div><div class="v">${ml.filter(x=>x.type==='مندوب').length}</div></div>
+            <div class="detail-item"><div class="k">الاشتراكات</div><div class="v">${ms.length}</div></div>
+            <div class="detail-item"><div class="k">الداتا/اللينكات</div><div class="v">${md.length}</div></div>
+          </div>
+        </div>
+        <div class="card"><div class="page-head"><h3>🎯 مهتمون ومندوبون</h3><button class="btn-primary btn-gold" id="add-member-lead" style="width:auto;padding:8px 15px;">+ إضافة</button></div>
+          ${ml.length?`<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>النوع</th><th>الهاتف</th><th>الحالة</th></tr></thead><tbody>${ml.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.type)}</td><td>${esc(x.phone)}</td><td>${esc(x.status)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state">لا توجد بيانات</div>'}
+        </div>
+        <div class="card"><div class="page-head"><h3>🔗 داتا ولينكات العضو</h3><button class="btn-primary btn-gold" id="add-member-data" style="width:auto;padding:8px 15px;">+ إضافة</button></div>
+          ${md.length?md.map(x=>`<div class="link-box"><div><b>${esc(x.title)}</b><div style="font-size:12px;color:var(--muted)">${esc(x.data||x.notes||'')}</div></div>${x.link?`<a href="${esc(x.link)}" target="_blank" rel="noopener">فتح ↗</a>`:''}</div>`).join(''):'<div class="empty-state">لا توجد داتا</div>'}
+        </div>
+        <div class="card"><h3>💳 اشتراكات العضو</h3>
+          ${ms.length?`<div class="table-wrap"><table><thead><tr><th>العميل</th><th>التاريخ</th><th>الباقة</th><th>الحالة</th></tr></thead><tbody>${ms.map(x=>`<tr><td>${esc(x.customerName)}</td><td>${esc(x.subscriptionDate)}</td><td>${esc(x.packageType)}</td><td>${esc(x.subscriptionStatus)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state">لا توجد اشتراكات</div>'}
+        </div>`;
+      document.getElementById('back-members').addEventListener('click',()=>showTeam(m?.team||teamNames[0]||''));
+      document.getElementById('add-member-lead').addEventListener('click',()=>openForm('indoor_leads',null));
+      document.getElementById('add-member-data').addEventListener('click',()=>openForm('pr_member_data',null));
+    };
+    page.querySelectorAll('[data-team]').forEach(c=>c.addEventListener('click',()=>showTeam(c.dataset.team)));
+  }
+
+  async function renderAreas(page){
+    const companies = await getData('companies');
+    page.innerHTML = `
+      <div class="page-head"><h2>🗺️ مناطق وأحياء الإسكندرية</h2></div>
+      <div class="card"><div class="areas-grid">
+        ${ALEX_AREAS.map(a=>{
+          const cnt = companies.filter(c=>c.area===a).length;
+          return `<div class="area-chip"><div class="cnt">${cnt}</div><div class="nm">${esc(a)}</div></div>`;
+        }).join('')}
+      </div></div>`;
+  }
+
+  function num_(v){ const n = parseFloat(v); return isNaN(n)? 0 : n; }
+  function money_(v){ return num_(v).toLocaleString('ar-EG', {minimumFractionDigits:0, maximumFractionDigits:2}); }
+
+  async function renderLedger(page){
+    const entries = await getData('accounting');
+    const clients = [...new Set(entries.map(e=>e.clientName).filter(Boolean))].sort();
+    const sel = state.ledgerClient;
+
+    const header = `
+      <div class="page-head">
+        <h2>💰 كشف الحساب${sel? ' — '+esc(sel):''}</h2>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <select id="ledger-client-filter" style="padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;">
+            <option value="">كل العملاء</option>
+            ${clients.map(c=>`<option value="${esc(c)}" ${c===sel?'selected':''}>${esc(c)}</option>`).join('')}
+          </select>
+          <button class="btn-primary btn-gold" id="add-ledger-btn" style="width:auto;padding:10px 20px;">+ إضافة قيد</button>
+        </div>
+      </div>`;
+
+    if(!sel){
+      // summary per client
+      const rows = clients.map(c=>{
+        const list = entries.filter(e=>e.clientName===c);
+        const totalDebit = list.reduce((s,e)=>s+num_(e.debit),0);
+        const totalCredit = list.reduce((s,e)=>s+num_(e.credit),0);
+        const balance = totalDebit - totalCredit;
+        return {c, totalDebit, totalCredit, balance};
+      });
+      const grandDebit = rows.reduce((s,r)=>s+r.totalDebit,0);
+      const grandCredit = rows.reduce((s,r)=>s+r.totalCredit,0);
+      page.innerHTML = header + `
+        <div class="stat-grid">
+          <div class="stat-card"><div class="num">${money_(grandDebit)}</div><div class="lbl">إجمالي المدين (على العملاء)</div></div>
+          <div class="stat-card"><div class="num">${money_(grandCredit)}</div><div class="lbl">إجمالي الدائن (المحصّل)</div></div>
+          <div class="stat-card"><div class="num">${money_(grandDebit-grandCredit)}</div><div class="lbl">صافي المتبقي على العملاء</div></div>
+        </div>
+        <div class="card">
+          ${rows.length? `<div class="table-wrap"><table>
+            <thead><tr><th>العميل</th><th>إجمالي مدين</th><th>إجمالي دائن</th><th>الرصيد</th><th></th></tr></thead>
+            <tbody>${rows.map(r=>`<tr>
+              <td>${esc(r.c)}</td><td>${money_(r.totalDebit)}</td><td>${money_(r.totalCredit)}</td>
+              <td><span class="badge ${r.balance>0?'red':(r.balance<0?'blue':'green')}">${money_(r.balance)}</span></td>
+              <td><button class="icon-btn" data-open="${esc(r.c)}">عرض كشف الحساب ↗</button></td>
+            </tr>`).join('')}</tbody>
+          </table></div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد قيود بعد — ابدأ بإضافة قيد</div>`}
+        </div>`;
+      page.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click', ()=>{ state.ledgerClient=b.dataset.open; render(); }));
+    } else {
+      const list = entries.filter(e=>e.clientName===sel).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+      let running = 0;
+      const rowsHtml = list.map(e=>{
+        running += num_(e.debit) - num_(e.credit);
+        return `<tr>
+          <td>${esc(e.date)}</td><td>${esc(e.description)}</td><td>${esc(e.packageType)}</td>
+          <td>${e.debit? money_(e.debit):'—'}</td><td>${e.credit? money_(e.credit):'—'}</td>
+          <td><b>${money_(running)}</b></td>
+          <td style="white-space:nowrap;"><button class="icon-btn" data-edit="${e.id}">✏️</button><button class="icon-btn del" data-del="${e.id}">🗑️</button></td>
+        </tr>`;
+      }).join('');
+      const totalDebit = list.reduce((s,e)=>s+num_(e.debit),0);
+      const totalCredit = list.reduce((s,e)=>s+num_(e.credit),0);
+      page.innerHTML = header + `
+        <button class="icon-btn" id="back-to-clients" style="margin-bottom:14px;">→ رجوع لكل العملاء</button>
+        <div class="stat-grid">
+          <div class="stat-card"><div class="num">${money_(totalDebit)}</div><div class="lbl">إجمالي المدين</div></div>
+          <div class="stat-card"><div class="num">${money_(totalCredit)}</div><div class="lbl">إجمالي الدائن</div></div>
+          <div class="stat-card"><div class="num">${money_(totalDebit-totalCredit)}</div><div class="lbl">الرصيد النهائي</div></div>
+        </div>
+        <div class="card">
+          ${list.length? `<div class="table-wrap"><table>
+            <thead><tr><th>التاريخ</th><th>البيان</th><th>نوع الباقة</th><th>مدين</th><th>دائن</th><th>الرصيد</th><th></th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table></div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد قيود لهذا العميل بعد</div>`}
+        </div>`;
+      document.getElementById('back-to-clients').addEventListener('click', ()=>{ state.ledgerClient=null; render(); });
+      page.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click', ()=>openLedgerForm(b.dataset.edit)));
+      page.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', async ()=>{
+        if(!confirm('تأكيد الحذف؟')) return;
+        await apiDelete('accounting', b.dataset.del);
+        invalidate('accounting');
+        render();
+      }));
+    }
+    document.getElementById('ledger-client-filter').addEventListener('change', e=>{ state.ledgerClient = e.target.value || null; render(); });
+    document.getElementById('add-ledger-btn').addEventListener('click', ()=>openLedgerForm(null, sel));
+  }
+
+  async function openLedgerForm(id, presetClient){
+    const list = await getData('accounting');
+    const row = id? list.find(r=>r.id===id) : (presetClient? {clientName:presetClient}: {});
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal">
+      <h3>${id? 'تعديل قيد':'إضافة قيد جديد'} — كشف الحساب</h3>
+      <form id="ledger-form"><div class="form-grid">
+        ${LEDGER_FIELDS.map(f=>renderField(f, row, {})).join('')}
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+        <button type="submit" class="btn-primary btn-gold">حفظ</button>
+      </div></form>
+    </div>`;
+    document.body.appendChild(modalBg);
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+    modalBg.querySelector('#ledger-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const isNew = !row.id;
+      const newRow = row.id? {...row} : {id: uid()};
+      LEDGER_FIELDS.forEach(f=>{ newRow[f.key] = modalBg.querySelector(`[name="${f.key}"]`).value; });
+      if(isNew) await apiAdd('accounting', newRow); else await apiUpdate('accounting', newRow);
+      invalidate('accounting');
+      state.ledgerClient = newRow.clientName;
+      modalBg.remove();
+      render();
+    });
+  }
+
+  /* ================================================================
+     Analytics — لوحات تحليل بيانات قابلة للتخصيص لكل قسم
+     كل قسم عنده امكانية يعمل "لوحة" مرتبطة بمصدر بيانات (أي موديول)،
+     ويضيف فيها عناصر تحليل (دائري / أعمدة / جدول / رقم) بنفسه، ويقدر
+     كمان يقسّم أي عنصر حسب "الفريق" لو الحقل مرتبط بموظف.
+     مسؤول تحليل البيانات (analyst) شايف كل الأقسام بدون استثناء.
+     ================================================================ */
+  const CHART_COLORS = ['#b3261e','#f2b705','#1a7a4c','#25508f','#a5690a','#6b7280',
+    '#8b5cf6','#0891b2','#dc2626','#059669','#d97706','#0284c7'];
+
+  function moduleDimensionOptions(mod){
+    const opts = [];
+    mod.fields.forEach(f=>{
+      if(f.type==='select' || f.type==='dynamicSelect'){
+        opts.push({key:f.key, label:f.label});
+        if(f.type==='dynamicSelect' && f.ref==='employees'){
+          opts.push({key:f.key+'__team', label:f.label+' — الفريق'});
+        }
+      }
+    });
+    return opts;
+  }
+  function moduleMetricFields(mod){ return mod.fields.filter(f=>f.type==='number'); }
+  function moduleFilterFields(mod){ return mod.fields.filter(f=>f.type==='select' || f.type==='dynamicSelect'); }
+
+  async function employeeTeamMap(){
+    const emps = await getData('employees');
+    const map = {};
+    emps.forEach(e=>{ if(e.name) map[e.name] = e.team || 'بدون فريق'; });
+    return map;
+  }
+
+  function dimValue(row, dimKey, teamMap){
+    if(dimKey.endsWith('__team')){
+      const base = dimKey.slice(0, -('__team'.length));
+      const person = row[base];
+      return (person && teamMap[person]) || 'بدون فريق';
+    }
+    return row[dimKey] || 'غير محدد';
+  }
+
+  function groupAndAggregate(rows, dimKey, metric, metricField, teamMap){
+    if(!dimKey){
+      const total = metric==='sum'? rows.reduce((s,r)=>s+num_(r[metricField]),0) : rows.length;
+      return [{label:'الإجمالي', value: total}];
+    }
+    const map = {};
+    rows.forEach(r=>{
+      const g = dimValue(r, dimKey, teamMap);
+      if(!(g in map)) map[g]=0;
+      map[g] += (metric==='sum') ? num_(r[metricField]) : 1;
+    });
+    return Object.entries(map).map(([k,v])=>({label:k, value:v})).sort((a,b)=>b.value-a.value);
+  }
+
+  function renderPieWidget(entries){
+    const total = entries.reduce((s,e)=>s+e.value,0) || 1;
+    let acc = 0;
+    const stops = entries.map((e,i)=>{
+      const start = acc/total*360; acc += e.value; const end = acc/total*360;
+      return `${CHART_COLORS[i % CHART_COLORS.length]} ${start}deg ${end}deg`;
+    }).join(', ');
+    const legend = entries.map((e,i)=>{
+      const pct = Math.round(e.value/total*1000)/10;
+      return `<div class="legend-row"><span class="dot" style="background:${CHART_COLORS[i % CHART_COLORS.length]}"></span>
+        <span class="legend-lbl">${esc(e.label)}</span><span class="legend-val">${e.value} (${pct}%)</span></div>`;
+    }).join('');
+    return `<div class="pie-wrap">
+      <div class="pie-donut-wrap"><div class="pie-donut" style="background:conic-gradient(${entries.length?stops:'#eee 0deg 360deg'});"></div><div class="pie-hole"></div></div>
+      <div class="pie-legend">${legend || '<div class="empty-mini">لا توجد بيانات</div>'}</div>
+    </div>`;
+  }
+
+  function renderBarWidget(entries){
+    if(!entries.length) return '<div class="empty-mini">لا توجد بيانات</div>';
+    const max = Math.max(1, ...entries.map(e=>e.value));
+    return `<div class="bar-wrap">${entries.map((e,i)=>{
+      const pct = Math.round(e.value/max*100);
+      return `<div class="bar-row"><div class="bar-lbl">${esc(e.label)}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${CHART_COLORS[i % CHART_COLORS.length]};"></div></div>
+        <span class="bar-val">${e.value}</span></div>`;
+    }).join('')}</div>`;
+  }
+
+  function renderTableWidget(entries){
+    return `<div class="table-wrap"><table><thead><tr><th>الفئة</th><th>القيمة</th></tr></thead>
+      <tbody>${entries.length? entries.map(e=>`<tr><td>${esc(e.label)}</td><td><b>${e.value}</b></td></tr>`).join('') :
+      `<tr><td colspan="2" style="text-align:center;color:var(--muted);">لا توجد بيانات</td></tr>`}</tbody></table></div>`;
+  }
+
+  function renderNumberWidget(entries){
+    const total = entries.reduce((s,e)=>s+e.value,0);
+    return `<div class="stat-number">${total.toLocaleString('ar-EG')}</div>`;
+  }
+
+  function renderWidgetBody(chartType, entries){
+    if(chartType==='pie') return renderPieWidget(entries);
+    if(chartType==='bar') return renderBarWidget(entries);
+    if(chartType==='table') return renderTableWidget(entries);
+    return renderNumberWidget(entries);
+  }
+
+  async function renderAnalytics(page, mods){
+    const accessibleKeys = new Set(mods.map(([k])=>k));
+    const allBoards = await getData('dashboards');
+    const myBoards = allBoards.filter(b=> accessibleKeys.has(b.sourceModule));
+    if(!state.analyticsBoard || !myBoards.find(b=>b.id===state.analyticsBoard)){
+      state.analyticsBoard = myBoards.length? myBoards[0].id : null;
+    }
+    const board = myBoards.find(b=>b.id===state.analyticsBoard) || null;
+    state.analyticsFilters = state.analyticsFilters || {};
+
+    let bodyHtml, mod, widgets;
+    if(!board){
+      bodyHtml = `<div class="card"><div class="empty-state"><div class="big">📊</div>لا توجد لوحات تحليل بعد — اضغط "+ لوحة جديدة" لبدء بناء التحليلات الخاصة بقسمك</div></div>`;
+    } else {
+      mod = MODULES[board.sourceModule];
+      const rawData = await getData(board.sourceModule);
+      const teamMap = await employeeTeamMap();
+      const filterFields = moduleFilterFields(mod);
+      const filtersHtml = filterFields.map(f=>{
+        const options = f.type==='select'? f.options : [...new Set(rawData.map(r=>r[f.key]).filter(Boolean))];
+        const cur = state.analyticsFilters[f.key] || '';
+        return `<select class="analytics-filter" data-field="${f.key}">
+          <option value="">${esc(f.label)}: الكل</option>
+          ${options.map(o=>`<option value="${esc(o)}" ${o===cur?'selected':''}>${esc(o)}</option>`).join('')}
+        </select>`;
+      }).join('');
+
+      const filteredData = rawData.filter(r=> filterFields.every(f=>{
+        const v = state.analyticsFilters[f.key]; return !v || r[f.key]===v;
+      }));
+
+      widgets = (await getData('widgets')).filter(w=>w.dashboardId===board.id);
+      const widgetCards = widgets.map(w=>{
+        const entries = groupAndAggregate(filteredData, w.groupBy, w.metric, w.metricField, teamMap);
+        return `<div class="widget-card">
+          <div class="widget-head"><h4>${esc(w.title)}</h4>
+            <div><button class="icon-btn" data-editw="${w.id}">✏️</button><button class="icon-btn del" data-delw="${w.id}">🗑️</button></div>
+          </div>
+          ${renderWidgetBody(w.chartType, entries)}
+        </div>`;
+      }).join('');
+
+      bodyHtml = `
+        <div class="page-head" style="margin-bottom:14px;">
+          <div class="analytics-filterbar">${filtersHtml || '<span style="color:var(--muted);font-size:13px;">لا توجد فلاتر متاحة لهذا المصدر</span>'}</div>
+          <div style="display:flex;gap:8px;">
+            ${filterFields.length? `<button class="btn-secondary" id="clear-filters" style="width:auto;padding:9px 16px;">✖ مسح الفلاتر</button>`:''}
+            <button class="icon-btn del" id="del-board-btn">🗑️ حذف اللوحة</button>
+          </div>
+        </div>
+        <div class="widgets-grid">
+          ${widgetCards}
+          <button class="widget-card add-widget-card" id="add-widget-btn">➕<br/>إضافة عنصر تحليل</button>
+        </div>`;
+    }
+
+    const boardTabs = myBoards.map(b=>`<button class="board-tab ${b.id===state.analyticsBoard?'active':''}" data-board="${b.id}">${MODULES[b.sourceModule]? MODULES[b.sourceModule].icon:'📊'} ${esc(b.name)}</button>`).join('');
+
+    page.innerHTML = `
+      <div class="page-head">
+        <h2>📊 تحليل البيانات</h2>
+        <button class="btn-primary btn-gold" id="new-board-btn" style="width:auto;padding:10px 20px;">+ لوحة جديدة</button>
+      </div>
+      ${myBoards.length? `<div class="board-tabs">${boardTabs}</div>` : ''}
+      ${bodyHtml}`;
+
+    document.getElementById('new-board-btn').addEventListener('click', ()=>openBoardForm(mods));
+    page.querySelectorAll('[data-board]').forEach(b=>b.addEventListener('click', ()=>{
+      state.analyticsBoard=b.dataset.board; state.analyticsFilters={}; render();
+    }));
+    if(board){
+      page.querySelectorAll('.analytics-filter').forEach(sel=>sel.addEventListener('change', ()=>{
+        state.analyticsFilters[sel.dataset.field] = sel.value; render();
+      }));
+      const clearBtn = document.getElementById('clear-filters');
+      if(clearBtn) clearBtn.addEventListener('click', ()=>{ state.analyticsFilters={}; render(); });
+      document.getElementById('del-board-btn').addEventListener('click', async ()=>{
+        if(!confirm('حذف اللوحة وكل عناصر التحليل بداخلها؟')) return;
+        const ws = (await getData('widgets')).filter(w=>w.dashboardId===board.id);
+        for(const w of ws) await apiDelete('widgets', w.id);
+        invalidate('widgets');
+        await apiDelete('dashboards', board.id);
+        invalidate('dashboards');
+        state.analyticsBoard = null;
+        render();
+      });
+      document.getElementById('add-widget-btn').addEventListener('click', ()=>openWidgetForm(board, mod, null));
+      page.querySelectorAll('[data-editw]').forEach(b=>b.addEventListener('click', ()=>{
+        const w = widgets.find(x=>x.id===b.dataset.editw);
+        openWidgetForm(board, mod, w);
+      }));
+      page.querySelectorAll('[data-delw]').forEach(b=>b.addEventListener('click', async ()=>{
+        if(!confirm('حذف عنصر التحليل؟')) return;
+        await apiDelete('widgets', b.dataset.delw);
+        invalidate('widgets');
+        render();
+      }));
+    }
+  }
+
+  function openBoardForm(mods){
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal">
+      <h3>إنشاء لوحة تحليل جديدة</h3>
+      <form id="board-form"><div class="form-grid">
+        <div class="field full"><label>اسم اللوحة</label><input name="name" type="text" required placeholder="مثال: تحليل زيارات العلاقات العامة"/></div>
+        <div class="field full"><label>مصدر البيانات (القسم)</label>
+          <select name="sourceModule" required>
+            <option value="">اختر...</option>
+            ${mods.map(([k,m])=>`<option value="${k}">${m.icon} ${esc(m.title)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+        <button type="submit" class="btn-primary btn-gold">إنشاء</button>
+      </div></form>
+    </div>`;
+    document.body.appendChild(modalBg);
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+    modalBg.querySelector('#board-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const rec = {id: uid(), name: fd.get('name'), sourceModule: fd.get('sourceModule'),
+        department: state.user.role, createdBy: state.user.name};
+      await apiAdd('dashboards', rec);
+      invalidate('dashboards');
+      state.analyticsBoard = rec.id;
+      state.analyticsFilters = {};
+      modalBg.remove();
+      render();
+    });
+  }
+
+  function openWidgetForm(board, mod, widget){
+    const dims = moduleDimensionOptions(mod);
+    const metricFields = moduleMetricFields(mod);
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal">
+      <h3>${widget? 'تعديل عنصر التحليل':'إضافة عنصر تحليل جديد'}</h3>
+      <form id="widget-form"><div class="form-grid">
+        <div class="field full"><label>عنوان العنصر</label><input name="title" type="text" required value="${widget?esc(widget.title):''}"/></div>
+        <div class="field"><label>نوع العرض</label>
+          <select name="chartType">
+            <option value="pie" ${widget&&widget.chartType==='pie'?'selected':''}>دائري (Pie)</option>
+            <option value="bar" ${widget&&widget.chartType==='bar'?'selected':''}>أعمدة (Bar)</option>
+            <option value="table" ${widget&&widget.chartType==='table'?'selected':''}>جدول</option>
+            <option value="number" ${widget&&widget.chartType==='number'?'selected':''}>رقم إجمالي</option>
+          </select>
+        </div>
+        <div class="field"><label>التقسيم حسب</label>
+          <select name="groupBy">
+            <option value="">بدون تقسيم (إجمالي فقط)</option>
+            ${dims.map(d=>`<option value="${d.key}" ${widget&&widget.groupBy===d.key?'selected':''}>${esc(d.label)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>المعدل (Metric)</label>
+          <select name="metric" id="metric-select">
+            <option value="count" ${!widget||widget.metric==='count'?'selected':''}>عدد السجلات</option>
+            ${metricFields.length? `<option value="sum" ${widget&&widget.metric==='sum'?'selected':''}>مجموع حقل رقمي</option>` : ''}
+          </select>
+        </div>
+        <div class="field" id="metric-field-wrap" style="${(!widget||widget.metric!=='sum')?'display:none;':''}">
+          <label>الحقل الرقمي</label>
+          <select name="metricField">
+            ${metricFields.map(f=>`<option value="${f.key}" ${widget&&widget.metricField===f.key?'selected':''}>${esc(f.label)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+        <button type="submit" class="btn-primary btn-gold">حفظ</button>
+      </div></form>
+    </div>`;
+    document.body.appendChild(modalBg);
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+    modalBg.querySelector('#metric-select').addEventListener('change', e=>{
+      modalBg.querySelector('#metric-field-wrap').style.display = e.target.value==='sum'? '' : 'none';
+    });
+    modalBg.querySelector('#widget-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const rec = {
+        id: widget? widget.id : uid(),
+        dashboardId: board.id,
+        title: fd.get('title'),
+        chartType: fd.get('chartType'),
+        groupBy: fd.get('groupBy') || '',
+        metric: fd.get('metric'),
+        metricField: fd.get('metricField') || '',
+      };
+      if(widget) await apiUpdate('widgets', rec); else await apiAdd('widgets', rec);
+      invalidate('widgets');
+      modalBg.remove();
+      render();
+    });
+  }
+
+  /* ================================================================
+     الإسكان: رحلات (Trips) -> فنادق (Hotels) -> غرف (Rooms) -> نزلاء (Guests)
+     الفكرة: من قسم "الإسكان" تدوس على تاريخ/بطاقة الرحلة فتظهر لك فنادق
+     هذه الرحلة. تدوس على الفندق فتحدد عدد الغرف وسعة كل غرفة. تدوس على
+     الغرفة فتدخل بيانات كل شخص مسكّن فيها.
+     ================================================================ */
+  async function renderAccommodationHub(page){
+    state.accomView = state.accomView || 'trips';
+    if(state.accomView==='hotels') return renderHotelsList(page);
+    if(state.accomView==='rooms') return renderRoomsList(page);
+    if(state.accomView==='guests') return renderGuestsList(page);
+    return renderTripsList(page);
+  }
+
+  function crumbsBar(items){
+    return `<div class="crumbs">${items.map((it,i)=>{
+      const isLast = i===items.length-1;
+      const sep = i>0? `<span class="sep">›</span>` : '';
+      return sep + (isLast? `<span>${esc(it.label)}</span>` : `<button data-crumb="${i}">${esc(it.label)}</button>`);
+    }).join('')}</div>`;
+  }
+  function bindCrumbs(page, handlers){
+    page.querySelectorAll('[data-crumb]').forEach(b=>b.addEventListener('click', ()=>handlers[Number(b.dataset.crumb)]()));
+  }
+
+  async function renderTripsList(page){
+    const trips = (await getData('trips')).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    page.innerHTML = `
+      <div class="page-head"><h2>🏨 الإسكان — الرحلات</h2>
+        <button class="btn-primary btn-gold" id="add-trip-btn" style="width:auto;padding:10px 20px;">+ إضافة رحلة</button>
+      </div>
+      <div class="card">
+        ${trips.length? `<div class="areas-grid">${trips.map(t=>`
+          <div class="area-chip click-card" data-trip="${t.id}">
+            <div class="cnt">📅</div><div class="nm">${esc(t.label||'رحلة')}</div>
+            <div class="nm" style="color:var(--navy-700);font-weight:700;">${esc(t.date||'')}</div>
+            <button class="icon-btn del" data-deltrip="${t.id}" style="margin-top:6px;">🗑️ حذف</button>
+          </div>`).join('')}</div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد رحلات بعد — ابدأ بالإضافة</div>`}
+      </div>`;
+    document.getElementById('add-trip-btn').addEventListener('click', ()=>openTripForm());
+    page.querySelectorAll('[data-trip]').forEach(el=>el.addEventListener('click', (e)=>{
+      if(e.target.closest('[data-deltrip]')) return;
+      state.accomTripId = el.dataset.trip; state.accomView='hotels'; render();
+    }));
+    page.querySelectorAll('[data-deltrip]').forEach(b=>b.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!confirm('حذف الرحلة وكل فنادقها وغرفها ونزلائها؟')) return;
+      const hotels = (await getData('accom_hotels')).filter(h=>h.tripId===b.dataset.deltrip);
+      const rooms = await getData('accom_rooms');
+      const guests = await getData('accom_guests');
+      for(const h of hotels){
+        const hRooms = rooms.filter(r=>r.hotelId===h.id);
+        for(const r of hRooms){
+          for(const g of guests.filter(g=>g.roomId===r.id)) await apiDelete('accom_guests', g.id);
+          await apiDelete('accom_rooms', r.id);
+        }
+        await apiDelete('accom_hotels', h.id);
+      }
+      await apiDelete('trips', b.dataset.deltrip);
+      invalidate('trips'); invalidate('accom_hotels'); invalidate('accom_rooms'); invalidate('accom_guests');
+      render();
+    }));
+  }
+
+  function openTripForm(){
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal"><h3>إضافة رحلة جديدة</h3>
+      <form id="trip-form"><div class="form-grid">
+        <div class="field"><label>تاريخ الرحلة</label><input name="date" type="date" required/></div>
+        <div class="field"><label>اسم/وصف الرحلة</label><input name="label" placeholder="مثال: عمرة رمضان دفعة 1"/></div>
+        <div class="field full"><label>ملاحظات</label><textarea name="notes" rows="3"></textarea></div>
+      </div>
+      <div class="modal-actions"><button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+        <button type="submit" class="btn-primary btn-gold">حفظ</button></div></form></div>`;
+    document.body.appendChild(modalBg);
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+    modalBg.querySelector('#trip-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const rec = {id:uid(), date:fd.get('date'), label:fd.get('label'), notes:fd.get('notes')};
+      await apiAdd('trips', rec); invalidate('trips'); modalBg.remove(); render();
+    });
+  }
+
+  async function renderHotelsList(page){
+    const trips = await getData('trips');
+    const trip = trips.find(t=>t.id===state.accomTripId);
+    if(!trip){ state.accomView='trips'; return render(); }
+    const allHotels = await getData('accom_hotels');
+    const hotels = allHotels.filter(h=>h.tripId===trip.id);
+    const allRooms = await getData('accom_rooms');
+    page.innerHTML = `
+      <div class="page-head">
+        <h2>🏨 فنادق رحلة ${esc(trip.label||'')} — ${esc(trip.date||'')}</h2>
+        <button class="btn-primary btn-gold" id="add-hotel-btn" style="width:auto;padding:10px 20px;">+ إضافة فندق</button>
+      </div>
+      ${crumbsBar([{label:'الرحلات'},{label:(trip.label||trip.date||'الفندق')}])}
+      <div class="card">
+        ${hotels.length? `<div class="areas-grid">${hotels.map(h=>{
+          const roomsCnt = allRooms.filter(r=>r.hotelId===h.id).length;
+          return `<div class="area-chip click-card" data-hotel="${h.id}">
+            <div class="cnt">🏨</div><div class="nm">${esc(h.name)}</div>
+            <div class="nm" style="color:var(--muted);">${esc(h.location||'')}</div>
+            <div class="nm" style="color:var(--navy-700);font-weight:700;">${roomsCnt} غرفة</div>
+            <button class="icon-btn del" data-delhotel="${h.id}" style="margin-top:6px;">🗑️ حذف</button>
+          </div>`;
+        }).join('')}</div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد فنادق مضافة لهذه الرحلة</div>`}
+      </div>`;
+    document.getElementById('add-hotel-btn').addEventListener('click', ()=>openHotelForm(trip.id));
+    bindCrumbs(page, [ ()=>{ state.accomView='trips'; render(); }, ()=>{} ]);
+    page.querySelectorAll('[data-hotel]').forEach(el=>el.addEventListener('click', (e)=>{
+      if(e.target.closest('[data-delhotel]')) return;
+      state.accomHotelId = el.dataset.hotel; state.accomView='rooms'; render();
+    }));
+    page.querySelectorAll('[data-delhotel]').forEach(b=>b.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!confirm('حذف الفندق وكل غرفه ونزلائه؟')) return;
+      const rooms = (await getData('accom_rooms')).filter(r=>r.hotelId===b.dataset.delhotel);
+      const guests = await getData('accom_guests');
+      for(const r of rooms){
+        for(const g of guests.filter(g=>g.roomId===r.id)) await apiDelete('accom_guests', g.id);
+        await apiDelete('accom_rooms', r.id);
+      }
+      await apiDelete('accom_hotels', b.dataset.delhotel);
+      invalidate('accom_hotels'); invalidate('accom_rooms'); invalidate('accom_guests');
+      render();
+    }));
+  }
+
+  function openHotelForm(tripId){
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal"><h3>إضافة فندق</h3>
+      <form id="hotel-form"><div class="form-grid">
+        <div class="field full"><label>اسم الفندق</label><input name="name" required/></div>
+        <div class="field full"><label>مكان الفندق</label><input name="location" placeholder="مثال: مكة - العزيزية"/></div>
+        <div class="field full"><label>ملاحظات</label><textarea name="notes" rows="2"></textarea></div>
+      </div>
+      <div class="modal-actions"><button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+        <button type="submit" class="btn-primary btn-gold">حفظ</button></div></form></div>`;
+    document.body.appendChild(modalBg);
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+    modalBg.querySelector('#hotel-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const rec = {id:uid(), tripId, name:fd.get('name'), location:fd.get('location'), notes:fd.get('notes')};
+      await apiAdd('accom_hotels', rec); invalidate('accom_hotels'); modalBg.remove(); render();
+    });
+  }
+
+  async function renderRoomsList(page){
+    const hotels = await getData('accom_hotels');
+    const hotel = hotels.find(h=>h.id===state.accomHotelId);
+    if(!hotel){ state.accomView='hotels'; return render(); }
+    const trips = await getData('trips');
+    const trip = trips.find(t=>t.id===hotel.tripId);
+    const rooms = (await getData('accom_rooms')).filter(r=>r.hotelId===hotel.id);
+    const guests = await getData('accom_guests');
+    page.innerHTML = `
+      <div class="page-head">
+        <h2>🛏️ غرف فندق ${esc(hotel.name)}</h2>
+        <button class="btn-primary btn-gold" id="add-room-btn" style="width:auto;padding:10px 20px;">+ إضافة غرفة</button>
+      </div>
+      ${crumbsBar([{label:'الرحلات'},{label:(trip? (trip.label||trip.date):'الفنادق')},{label:hotel.name}])}
+      <div class="card">
+        ${rooms.length? `<div class="areas-grid">${rooms.map(r=>{
+          const cnt = guests.filter(g=>g.roomId===r.id).length;
+          const cap = num_(r.capacity)||1;
+          const pct = Math.min(100, Math.round(cnt/cap*100));
+          return `<div class="area-chip click-card" data-room="${r.id}">
+            <div class="cnt">🛏️ ${esc(r.roomNumber||'')}</div>
+            <div class="nm">${cnt} / ${cap} فرد</div>
+            <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${cnt>cap?'var(--danger)':'var(--navy-600)'};"></div></div>
+            <button class="icon-btn del" data-delroom="${r.id}" style="margin-top:6px;">🗑️ حذف</button>
+          </div>`;
+        }).join('')}</div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد غرف مضافة لهذا الفندق</div>`}
+      </div>`;
+    document.getElementById('add-room-btn').addEventListener('click', ()=>openRoomForm(hotel.id));
+    bindCrumbs(page, [ ()=>{ state.accomView='trips'; render(); }, ()=>{ state.accomView='hotels'; render(); }, ()=>{} ]);
+    page.querySelectorAll('[data-room]').forEach(el=>el.addEventListener('click', (e)=>{
+      if(e.target.closest('[data-delroom]')) return;
+      state.accomRoomId = el.dataset.room; state.accomView='guests'; render();
+    }));
+    page.querySelectorAll('[data-delroom]').forEach(b=>b.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!confirm('حذف الغرفة وكل نزلائها؟')) return;
+      const gs = (await getData('accom_guests')).filter(g=>g.roomId===b.dataset.delroom);
+      for(const g of gs) await apiDelete('accom_guests', g.id);
+      await apiDelete('accom_rooms', b.dataset.delroom);
+      invalidate('accom_rooms'); invalidate('accom_guests');
+      render();
+    }));
+  }
+
+  function openRoomForm(hotelId){
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal"><h3>إضافة غرفة</h3>
+      <form id="room-form"><div class="form-grid">
+        <div class="field"><label>رقم / اسم الغرفة</label><input name="roomNumber" required/></div>
+        <div class="field"><label>عدد الأفراد (السعة)</label><input name="capacity" type="number" min="1" value="2" required/></div>
+      </div>
+      <div class="modal-actions"><button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+        <button type="submit" class="btn-primary btn-gold">حفظ</button></div></form></div>`;
+    document.body.appendChild(modalBg);
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+    modalBg.querySelector('#room-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const rec = {id:uid(), hotelId, roomNumber:fd.get('roomNumber'), capacity:fd.get('capacity')};
+      await apiAdd('accom_rooms', rec); invalidate('accom_rooms'); modalBg.remove(); render();
+    });
+  }
+
+  async function renderGuestsList(page){
+    const rooms = await getData('accom_rooms');
+    const room = rooms.find(r=>r.id===state.accomRoomId);
+    if(!room){ state.accomView='hotels'; return render(); }
+    const hotels = await getData('accom_hotels');
+    const hotel = hotels.find(h=>h.id===room.hotelId);
+    const trips = await getData('trips');
+    const trip = hotel? trips.find(t=>t.id===hotel.tripId) : null;
+    const guests = (await getData('accom_guests')).filter(g=>g.roomId===room.id);
+    const cap = num_(room.capacity)||1;
+    page.innerHTML = `
+      <div class="page-head">
+        <h2>👤 نزلاء غرفة ${esc(room.roomNumber||'')} — ${esc(hotel?hotel.name:'')}</h2>
+        <button class="btn-primary btn-gold" id="add-guest-btn" style="width:auto;padding:10px 20px;">+ إضافة نزيل</button>
+      </div>
+      ${crumbsBar([{label:'الرحلات'},{label:(trip?(trip.label||trip.date):'')},{label:(hotel?hotel.name:'')},{label:'غرفة '+(room.roomNumber||'')}])}
+      ${guests.length>cap? `<div class="assumption-note" style="background:#fdeceb;border-color:#f3c6c2;color:var(--danger);">تنبيه: عدد النزلاء (${guests.length}) أكبر من سعة الغرفة (${cap})</div>`:''}
+      <div class="card">
+        ${guests.length? `<div class="table-wrap"><table>
+          <thead><tr><th>الاسم</th><th>رقم الجواز</th><th>الهاتف</th><th>حالة الطيران</th><th></th></tr></thead>
+          <tbody>${guests.map(g=>`<tr>
+            <td>${esc(g.name)}</td><td>${esc(g.passportNumber)}</td><td>${esc(g.phone)}</td>
+            <td>${fieldDisplay({key:'flightStatus'}, g.flightStatus)}</td>
+            <td><button class="icon-btn" data-editg="${g.id}">✏️</button><button class="icon-btn del" data-delg="${g.id}">🗑️</button></td>
+          </tr>`).join('')}</tbody></table></div>` : `<div class="empty-state"><div class="big">📭</div>لا يوجد نزلاء بعد في هذه الغرفة</div>`}
+      </div>`;
+    document.getElementById('add-guest-btn').addEventListener('click', ()=>openGuestForm(room.id, null));
+    bindCrumbs(page, [ ()=>{ state.accomView='trips'; render(); }, ()=>{ state.accomView='hotels'; render(); },
+      ()=>{ state.accomView='rooms'; render(); }, ()=>{} ]);
+    page.querySelectorAll('[data-editg]').forEach(b=>b.addEventListener('click', ()=>openGuestForm(room.id, b.dataset.editg)));
+    page.querySelectorAll('[data-delg]').forEach(b=>b.addEventListener('click', async ()=>{
+      if(!confirm('حذف النزيل؟')) return;
+      await apiDelete('accom_guests', b.dataset.delg); invalidate('accom_guests'); render();
+    }));
+  }
+
+  async function openGuestForm(roomId, id){
+    const list = await getData('accom_guests');
+    const row = id? list.find(g=>g.id===id) : {};
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal"><h3>${id?'تعديل بيانات نزيل':'إضافة نزيل'}</h3>
+      <form id="guest-form"><div class="form-grid">
+        <div class="field"><label>الاسم</label><input name="name" required value="${esc(row.name||'')}"/></div>
+        <div class="field"><label>رقم الجواز</label><input name="passportNumber" value="${esc(row.passportNumber||'')}"/></div>
+        <div class="field"><label>الهاتف</label><input name="phone" value="${esc(row.phone||'')}"/></div>
+        <div class="field"><label>حالة حجز الطيران</label><select name="flightStatus">
+          <option value="لم يُحجز" ${row.flightStatus==='لم يُحجز'?'selected':''}>لم يُحجز</option>
+          <option value="تم الحجز" ${row.flightStatus==='تم الحجز'?'selected':''}>تم الحجز</option>
+        </select></div>
+        <div class="field full"><label>ملاحظات</label><textarea name="notes" rows="2">${esc(row.notes||'')}</textarea></div>
+      </div>
+      <div class="modal-actions"><button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+        <button type="submit" class="btn-primary btn-gold">حفظ</button></div></form></div>`;
+    document.body.appendChild(modalBg);
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+    modalBg.querySelector('#guest-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const rec = {id: id||uid(), roomId, name:fd.get('name'), passportNumber:fd.get('passportNumber'),
+        phone:fd.get('phone'), flightStatus:fd.get('flightStatus'), notes:fd.get('notes')};
+      if(id) await apiUpdate('accom_guests', rec); else await apiAdd('accom_guests', rec);
+      invalidate('accom_guests'); modalBg.remove(); render();
+    });
+  }
+
+  /* ================================================================
+     الداتا والأرقام: عرض شبيه بالشيت (تعديل مباشر داخل الجدول)
+     + إمكانية ربط رابط شيت جوجل خاص بالموظفين يفتحوه لسحب أرقام منه.
+     ================================================================ */
+  async function renderIndoorDataSheet(page){
+    const mod = MODULES.indoor_data;
+    const data = await getData('indoor_data');
+    const emps = await getData('employees');
+    const repOptions = emps.filter(e=>e.department==='علاقات عامة - إن دور').map(e=>e.name);
+    const canEditLink = ['admin','pr_in'].includes(state.user.role);
+    const sheetLink = await getSetting('indoor_data_sheet_link');
+    const cols = mod.fields;
+    page.innerHTML = `
+      <div class="page-head"><h2>${mod.icon} ${esc(mod.title)}</h2></div>
+      <div class="sheet-toolbar">
+        ${sheetLink? `<a href="${esc(sheetLink)}" target="_blank" rel="noopener" class="icon-btn" style="background:var(--sand-100);">📄 فتح شيت الموظفين</a>` : ''}
+        ${canEditLink? `<button class="icon-btn" id="set-link-btn" style="background:var(--sand-100);">🔗 ${sheetLink?'تعديل رابط الشيت':'ربط شيت خارجي'}</button>`:''}
+        <button class="btn-primary btn-gold" id="add-row-btn" style="width:auto;padding:9px 18px;">+ صف جديد</button>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div class="table-wrap"><table>
+          <thead><tr>${cols.map(f=>`<th>${esc(f.label)}</th>`).join('')}<th></th></tr></thead>
+          <tbody id="sheet-body">${data.map(row=>renderSheetRow(row, cols, repOptions)).join('')}</tbody>
+        </table></div>
+        ${!data.length? `<div class="empty-state"><div class="big">📭</div>لا توجد بيانات بعد — اضغط "+ صف جديد"</div>`:''}
+      </div>`;
+
+    if(canEditLink){
+      document.getElementById('set-link-btn').addEventListener('click', async ()=>{
+        const val = prompt('ضع رابط شيت جوجل الخاص بالموظفين (Google Sheet URL):', sheetLink||'');
+        if(val===null) return;
+        await setSetting('indoor_data_sheet_link', val.trim());
+        render();
+      });
+    }
+    document.getElementById('add-row-btn').addEventListener('click', async ()=>{
+      const rec = {id:uid()}; cols.forEach(f=>rec[f.key]='');
+      await apiAdd('indoor_data', rec); invalidate('indoor_data'); render();
+    });
+    page.querySelectorAll('.cell-input').forEach(inp=>{
+      inp.addEventListener('change', async ()=>{
+        const id = inp.dataset.id, key = inp.dataset.key;
+        const rows = await getData('indoor_data');
+        const rec = rows.find(r=>r.id===id); if(!rec) return;
+        rec[key] = inp.value;
+        await apiUpdate('indoor_data', rec); invalidate('indoor_data');
+      });
+    });
+    page.querySelectorAll('[data-delrow]').forEach(b=>b.addEventListener('click', async ()=>{
+      if(!confirm('حذف الصف؟')) return;
+      await apiDelete('indoor_data', b.dataset.delrow); invalidate('indoor_data'); render();
+    }));
+  }
+
+  function renderSheetRow(row, cols, repOptions){
+    return `<tr>${cols.map(f=>{
+      if(f.key==='responsiblePerson'){
+        return `<td><select class="cell-input" data-id="${row.id}" data-key="${f.key}">
+          <option value="">اختر...</option>
+          ${repOptions.map(o=>`<option value="${esc(o)}" ${o===row[f.key]?'selected':''}>${esc(o)}</option>`).join('')}
+        </select></td>`;
+      }
+      return `<td><input class="cell-input" data-id="${row.id}" data-key="${f.key}" value="${esc(row[f.key]||'')}"/></td>`;
+    }).join('')}<td><button class="icon-btn del" data-delrow="${row.id}">🗑️</button></td></tr>`;
+  }
+
+  /* ---------------- Generic module CRUD renderer ---------------- */
+  async function renderModule(page, key){
+    const mod = MODULES[key];
+    if(!mod || !mod.roles.includes(state.user.role)) return;
+    const allData = await getData(key);
+    const data = await filterPRData(key, allData);
+    page.innerHTML = `
+      <div class="page-head">
+        <h2>${mod.icon} ${esc(mod.title)}</h2>
+        <button class="btn-primary btn-gold" id="add-btn" style="width:auto;padding:10px 20px;">+ إضافة</button>
+      </div>
+      ${isPRUser() && state.user.role!=='pr_manager' ? `<div class="assumption-note">البيانات المعروضة هنا خاصة بنطاق صلاحيتك. لا يتم عرض بيانات أعضاء العلاقات العامة الآخرين.</div>`:''}
+      <div class="card">
+        ${data.length? `<div class="table-wrap"><table>
+          <thead><tr>${mod.fields.map(f=>`<th>${esc(f.label)}</th>`).join('')}<th></th></tr></thead>
+          <tbody>${data.map(row=>renderRow(mod,row)).join('')}</tbody>
+        </table></div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد بيانات بعد — ابدأ بالإضافة</div>`}
+      </div>`;
+    document.getElementById('add-btn').addEventListener('click', ()=> key==='employees' ? openEmployeeAccountForm() : openForm(key, null));
+    page.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click', ()=>{
+      const row=data.find(r=>String(r.id)===String(b.dataset.edit));
+      if(prCanEditRow(key,row)) openForm(key,b.dataset.edit); else alert('ليس لديك صلاحية لتعديل هذه البيانات');
+    }));
+    page.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', async ()=>{
+      const row=data.find(r=>String(r.id)===String(b.dataset.del));
+      if(!prCanEditRow(key,row)){ alert('ليس لديك صلاحية لحذف هذه البيانات'); return; }
+      if(!confirm('تأكيد الحذف؟')) return;
+      await apiDelete(key,b.dataset.del); invalidate(key); render();
+    }));
+  }
+
+  function fieldDisplay(f, val, allData){
+    if(f.type==='image'){
+      return val? `<img class="row-photo" src="${val}"/>` : `<div class="row-photo"></div>`;
+    }
+    if(f.key==='status' || f.key==='flightStatus' || f.key==='paymentStatus'){
+      const map = {'تم التواصل':'blue','تم تحديد معاد':'gold','تم الرفض':'red','تحت التفاوض':'gold',
+        'لم يتم التوصل لأي شيء':'gray','لم تتم الزيارة':'gray','مكتمل':'green','جاري السداد':'gold','متأخر':'red',
+        'تم الحجز':'green','لم يُحجز':'gray','جديد':'blue','تحويل لحجز':'green'};
+      const cls = map[val] || 'gray';
+      return val? `<span class="badge ${cls}">${esc(val)}</span>` : '';
+    }
+    return esc(val);
+  }
+
+  function renderRow(mod, row){
+    return `<tr>${mod.fields.map(f=>`<td>${fieldDisplay(f,row[f.key])}</td>`).join('')}
+      <td style="white-space:nowrap;">
+        <button class="icon-btn" data-edit="${row.id}">✏️</button>
+        <button class="icon-btn del" data-del="${row.id}">🗑️</button>
+      </td></tr>`;
+  }
+
+  async function openEmployeeAccountForm(){
+    if(!['admin','hr'].includes(state.user.role)) return;
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal">
+      <h3>إضافة موظف + إنشاء حساب دخول</h3>
+      <div class="assumption-note">الحساب والبيانات يتم حفظهما في Google Sheets. كلمة المرور تُحفظ بشكل مُشفّر (Hash) ولا تظهر بعد الحفظ.</div>
+      <form id="employee-account-form"><div class="form-grid">
+        <div class="field"><label>اسم الموظف *</label><input name="name" required /></div>
+        <div class="field"><label>اسم المستخدم *</label><input name="username" required pattern="[a-zA-Z0-9._-]{3,40}" placeholder="مثال: ahmed123" /></div>
+        <div class="field"><label>كلمة المرور *</label><input name="password" type="password" minlength="8" required placeholder="8 أحرف على الأقل" /></div>
+        <div class="field"><label>تأكيد كلمة المرور *</label><input name="password2" type="password" minlength="8" required /></div>
+        <div class="field"><label>الصلاحية *</label><select name="role" required>
+          <option value="">اختر...</option>${Object.entries(ROLE_LABELS).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')}
+        </select></div>
+        <div class="field"><label>القسم</label><select name="department"><option value="">اختر...</option>${Object.values(ROLE_LABELS).map(v=>`<option>${esc(v)}</option>`).join('')}</select></div>
+        <div class="field"><label>الرقم الخاص</label><input name="specialNumber" /></div>
+        <div class="field"><label>رقم الشركة</label><input name="companyNumber" /></div>
+        <div class="field"><label>رقم الهاتف</label><input name="phone" /></div>
+        <div class="field"><label>العنوان</label><input name="address" /></div>
+        <div class="field"><label>تاريخ التعيين</label><input name="hireDate" type="date" /></div>
+        <div class="field"><label>الراتب</label><input name="salary" type="number" /></div>
+        <div class="field full"><label>الفريق</label><select name="team"><option value="">بدون فريق</option></select></div>
+      </div>
+      <div class="modal-actions"><button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button><button type="submit" class="btn-primary btn-gold">إنشاء الحساب والموظف</button></div>
+      </form></div>`;
+    document.body.appendChild(modalBg);
+    const teams = await getData('teams');
+    const teamSel = modalBg.querySelector('[name="team"]');
+    teamSel.innerHTML = '<option value="">بدون فريق</option>' + teams.map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{if(e.target===modalBg) modalBg.remove();});
+    modalBg.querySelector('#employee-account-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const form=e.target, btn=form.querySelector('button[type=submit]');
+      const password=form.password.value, password2=form.password2.value;
+      if(password!==password2){ alert('تأكيد كلمة المرور غير مطابق'); return; }
+      btn.disabled=true; btn.textContent='جارٍ إنشاء الحساب...';
+      try{
+        const payload={
+          name:form.name.value.trim(), username:form.username.value.trim().toLowerCase(), password,
+          role:form.role.value,
+          employeeData:{specialNumber:form.specialNumber.value, companyNumber:form.companyNumber.value, department:form.department.value,
+            team:form.team.value, phone:form.phone.value, address:form.address.value, hireDate:form.hireDate.value||null,
+            salary:form.salary.value?Number(form.salary.value):null}
+        };
+        if(!payload.name || !payload.username || !payload.password || !payload.role) throw new Error('أكمل البيانات المطلوبة');
+        const users=await loadList('users');
+        if(users.some(x=>String(x.username||'').toLowerCase()===payload.username)) throw new Error('اسم المستخدم مستخدم بالفعل');
+        const employeeId=uid();
+        const user={id:uid(),name:payload.name,username:payload.username,passwordHash:await sha256(payload.password),role:payload.role,status:'active',
+          team:payload.employeeData.team||'',employeeId};
+        const employee={id:employeeId,name:payload.name,username:payload.username,department:payload.employeeData.department||ROLE_LABELS[payload.role]||'',status:'active',...payload.employeeData};
+        await apiAdd('users',user); await apiAdd('employees',employee);
+        invalidate('employees'); invalidate('users'); modalBg.remove(); render();
+      }catch(err){
+        console.error(err); alert(err.message || 'فشل إنشاء حساب الموظف'); btn.disabled=false; btn.textContent='إنشاء الحساب والموظف';
+      }
+    });
+  }
+
+  /** أي موظف مسجّل دخوله يقدر يغيّر اسم المستخدم و/أو كلمة المرور بتاعته من هنا */
+  function openChangeAccountForm(){
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal">
+      <h3>تغيير بيانات الدخول</h3>
+      <div class="assumption-note">سيبها فاضية لو مش عايز تغيّرها. لازم تدخل كلمة المرور الحالية للتأكيد.</div>
+      <form id="change-account-form"><div class="form-grid">
+        <div class="field"><label>اسم المستخدم الجديد (اختياري)</label><input name="newUsername" pattern="[a-zA-Z0-9._-]{3,40}" placeholder="سيبها فاضية لو مش هتغيّر" /></div>
+        <div class="field"><label>كلمة المرور الجديدة (اختياري)</label><input name="newPassword" type="password" minlength="8" placeholder="8 أحرف على الأقل" /></div>
+        <div class="field full"><label>كلمة المرور الحالية *</label><input name="currentPassword" type="password" required /></div>
+      </div>
+      <div class="modal-actions"><button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button><button type="submit" class="btn-primary btn-gold">حفظ</button></div>
+      </form></div>`;
+    document.body.appendChild(modalBg);
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{if(e.target===modalBg) modalBg.remove();});
+    modalBg.querySelector('#change-account-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const form=e.target, btn=form.querySelector('button[type=submit]');
+      const newUsername = form.newUsername.value.trim();
+      const newPassword = form.newPassword.value;
+      const currentPassword = form.currentPassword.value;
+      if(!newUsername && !newPassword){ alert('حدد اسم مستخدم جديد أو كلمة مرور جديدة على الأقل'); return; }
+      btn.disabled=true; btn.textContent='جارٍ الحفظ...';
+      try{
+        const users=await loadList('users');
+        const idx=users.findIndex(x=>x.id===state.user.id);
+        if(idx<0) throw new Error('لم يتم العثور على الحساب');
+        if(users[idx].passwordHash!==await sha256(currentPassword)) throw new Error('كلمة المرور الحالية غير صحيحة');
+        if(newUsername && users.some(x=>x.id!==state.user.id && String(x.username||'').toLowerCase()===newUsername.toLowerCase())) throw new Error('اسم المستخدم مستخدم بالفعل');
+        if(newUsername) users[idx].username=newUsername.toLowerCase();
+        if(newPassword) users[idx].passwordHash=await sha256(newPassword);
+        await apiUpdate('users',users[idx]);
+        state.user=users[idx]; localStorage.setItem('homsa_session_user',JSON.stringify(state.user));
+        alert('تم تحديث بيانات الدخول بنجاح.' + (newUsername? ' اسم المستخدم الجديد: '+users[idx].username : ''));
+        modalBg.remove(); render();
+      }catch(err){
+        console.error(err); alert(err.message || 'فشل تحديث بيانات الدخول'); btn.disabled=false; btn.textContent='حفظ';
+      }
+    });
+  }
+
+  async function openForm(key, id){
+    const mod = MODULES[key];
+    if(!mod || !mod.roles.includes(state.user.role)) return;
+    const list = await getData(key);
+    const row = id? list.find(r=>r.id===id) : {};
+    if(id && !prCanEditRow(key,row)){ alert('ليس لديك صلاحية لتعديل هذه البيانات'); return; }
+    let refOptions = {};
+    for(const f of mod.fields){
+      if(f.type==='dynamicSelect'){
+        let refList = await getData(f.ref);
+        if(f.filter) refList = refList.filter(r=> r[f.filter.field]===f.filter.value);
+        if(isPRUser() && ['pr_manager','pr_leader','pr_member'].includes(state.user.role) && f.ref==='employees'){
+          if(state.user.role==='pr_manager') {}
+          else {
+            const names=await prAllowedNames();
+            refList=refList.filter(r=>names.has(r.name));
+          }
+        }
+        refOptions[f.key] = refList.map(r=>r[f.refField]);
+      }
+    }
+
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal">
+      <h3>${id? 'تعديل بيانات':'إضافة جديد'} — ${esc(mod.title)}</h3>
+      <form id="mod-form"><div class="form-grid">
+        ${mod.fields.map(f=>renderField(f, row, refOptions)).join('')}
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+        <button type="submit" class="btn-primary btn-gold">حفظ</button>
+      </div></form>
+    </div>`;
+    document.body.appendChild(modalBg);
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+
+    const imgInput = modalBg.querySelector('input[type=file]');
+    if(imgInput){
+      imgInput.addEventListener('change', ()=>{
+        const file = imgInput.files[0]; if(!file) return;
+        const reader = new FileReader();
+        reader.onload = ()=>{ imgInput.dataset.value = reader.result;
+          const prev = modalBg.querySelector('.photo-preview'); if(prev) prev.src = reader.result; };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    modalBg.querySelector('#mod-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const isNew = !row.id;
+      const newRow = row.id? {...row} : {id: uid()};
+      for(const f of mod.fields){
+        if(f.type==='readonly') continue;
+        if(f.type==='image'){ newRow[f.key] = imgInput.dataset.value || row[f.key] || ''; continue; }
+        const el = modalBg.querySelector(`[name="${f.key}"]`);
+        if(el) newRow[f.key] = el.value;
+      }
+
+      /* عضو العلاقات العامة لا يستطيع إنشاء سجل باسم عضو آخر */
+      if(isPRUser() && state.user.role==='pr_member'){
+        const me=await currentEmployeeFresh(), myName=me?.name||state.user.name;
+        if(['indoor_leads','indoor_data','subscriptions'].includes(key)) newRow.responsiblePerson=myName;
+        if(key==='pr_member_data') newRow.memberId=myName;
+      }
+      if(isPRUser() && state.user.role==='pr_leader'){
+        const names=await prAllowedNames();
+        if(['indoor_leads','indoor_data','subscriptions'].includes(key) && newRow.responsiblePerson && !names.has(newRow.responsiblePerson))
+          throw new Error('لا يمكن ربط البيانات بعضو خارج فريقك');
+        if(key==='pr_member_data' && newRow.memberId && !names.has(newRow.memberId))
+          throw new Error('لا يمكن ربط الداتا بعضو خارج فريقك');
+      }
+
+      if(isNew) await apiAdd(key, newRow); else await apiUpdate(key, newRow);
+      invalidate(key);
+      if(key==='indoor_leads') await maybeCreateSubscriptionFromLead(newRow);
+      if(key==='subscriptions') invalidate('subscriptions');
+      modalBg.remove();
+      render();
+    });
+  }
+
+  function renderField(f, row, refOptions){
+    const val = row? (row[f.key]||'') : '';
+    const full = (f.type==='textarea'||f.type==='image') ? 'full':'';
+    let inner = '';
+    if(f.type==='select'){
+      inner = `<select name="${f.key}" ${f.required?'required':''}><option value="">اختر...</option>
+        ${f.options.map(o=>`<option value="${esc(o)}" ${o===val?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+    } else if(f.type==='dynamicSelect'){
+      const opts = refOptions[f.key]||[];
+      inner = `<select name="${f.key}" ${f.required?'required':''}><option value="">اختر...</option>
+        ${opts.map(o=>`<option value="${esc(o)}" ${o===val?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+    } else if(f.type==='textarea'){
+      inner = `<textarea name="${f.key}" rows="3">${esc(val)}</textarea>`;
+    } else if(f.type==='image'){
+      inner = `${val?`<img class="photo-preview" src="${val}"/>`:''}<input type="file" accept="image/*" name="${f.key}"/>`;
+    } else if(f.type==='readonly'){
+      inner = `<input type="text" name="${f.key}" value="${esc(val)}" readonly style="background:#eee;cursor:not-allowed"/>`;
+    } else {
+
+      inner = `<input type="${f.type}" name="${f.key}" value="${esc(val)}" ${f.required?'required':''}/>`;
+    }
+    return `<div class="field ${full}"><label>${esc(f.label)}</label>${inner}</div>`;
+  }
+
+  (async function initAuth(){
+    try{
+      const saved=localStorage.getItem('homsa_session_user');
+      HOMSA_SESSION=localStorage.getItem('homsa_session_token') || '';
+      if(saved && HOMSA_SESSION){
+        const u=new URL(GOOGLE_SHEETS_WEBHOOK);
+        u.searchParams.set('action','me');
+        u.searchParams.set('session',HOMSA_SESSION);
+        const r=await fetch(u.toString(),{cache:'no-store'});
+        const data=await r.json();
+        if(data.ok) state.user=data.user;
+        else { localStorage.removeItem('homsa_session_user'); localStorage.removeItem('homsa_session_token'); HOMSA_SESSION=''; }
+      }
+    }catch(e){ console.error('Init error',e); localStorage.removeItem('homsa_session_user'); localStorage.removeItem('homsa_session_token'); HOMSA_SESSION=''; }
+    render();
+  })();
+})();
+</script>
+</body>
+</html>
