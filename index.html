@@ -349,6 +349,7 @@
       fields:[
         {key:'leadId', label:'معرّف المهتم', type:'readonly'},
         {key:'customerName', label:'اسم العميل', type:'text', required:true},
+        {key:'nationalId', label:'الرقم القومي', type:'text'},
         {key:'phone', label:'رقم الهاتف', type:'text'},
         {key:'responsiblePerson', label:'المسؤول', type:'dynamicSelect', ref:'employees', refField:'name'},
         {key:'subscriptionDate', label:'تاريخ الاشتراك', type:'date', required:true},
@@ -597,6 +598,32 @@
       packageType:'', subscriptionStatus:'نشط', notes:lead.notes||''
     };
     await apiAdd('subscriptions',sub);
+  }
+
+  // بيربط الاشتراك بالتسكين (الفندق/الغرفة) تلقائيًا: لما يتحدد roomId في الاشتراك
+  // بيضيف/يحدّث نزيل في accom_guests علشان يظهر العميل في شاشة "الإسكان" أوتوماتيك.
+  // لو تم شيل الغرفة من الاشتراك بيتشال النزيل المرتبط بيه.
+  async function syncSubscriptionGuest(sub){
+    const guests = await getData('accom_guests');
+    const existing = guests.find(g=>String(g.subscriptionId||'')===String(sub.id));
+
+    if(!sub.roomId){
+      if(existing) await apiDelete('accom_guests', existing.id);
+      return;
+    }
+
+    const rec = {
+      id: existing? existing.id : uid(),
+      subscriptionId: sub.id,
+      roomId: sub.roomId,
+      name: sub.customerName||'',
+      nationalId: sub.nationalId||'',
+      phone: sub.phone||'',
+      passportNumber: existing? (existing.passportNumber||'') : '',
+      flightStatus: existing? (existing.flightStatus||'لم يُحجز') : 'لم يُحجز',
+      notes: existing? (existing.notes||'') : ''
+    };
+    if(existing) await apiUpdate('accom_guests', rec); else await apiAdd('accom_guests', rec);
   }
 
   /* ---------------- Render router ---------------- */
@@ -1530,9 +1557,9 @@
       ${guests.length>cap? `<div class="assumption-note" style="background:#fdeceb;border-color:#f3c6c2;color:var(--danger);">تنبيه: عدد النزلاء (${guests.length}) أكبر من سعة الغرفة (${cap})</div>`:''}
       <div class="card">
         ${guests.length? `<div class="table-wrap"><table>
-          <thead><tr><th>الاسم</th><th>رقم الجواز</th><th>الهاتف</th><th>حالة الطيران</th><th></th></tr></thead>
+          <thead><tr><th>الاسم</th><th>الرقم القومي</th><th>رقم الجواز</th><th>الهاتف</th><th>حالة الطيران</th><th></th></tr></thead>
           <tbody>${guests.map(g=>`<tr>
-            <td>${esc(g.name)}</td><td>${esc(g.passportNumber)}</td><td>${esc(g.phone)}</td>
+            <td>${esc(g.name)}</td><td>${esc(g.nationalId)}</td><td>${esc(g.passportNumber)}</td><td>${esc(g.phone)}</td>
             <td>${fieldDisplay({key:'flightStatus'}, g.flightStatus)}</td>
             <td><button class="icon-btn" data-editg="${g.id}">✏️</button><button class="icon-btn del" data-delg="${g.id}">🗑️</button></td>
           </tr>`).join('')}</tbody></table></div>` : `<div class="empty-state"><div class="big">📭</div>لا يوجد نزلاء بعد في هذه الغرفة</div>`}
@@ -1555,6 +1582,7 @@
     modalBg.innerHTML = `<div class="modal"><h3>${id?'تعديل بيانات نزيل':'إضافة نزيل'}</h3>
       <form id="guest-form"><div class="form-grid">
         <div class="field"><label>الاسم</label><input name="name" required value="${esc(row.name||'')}"/></div>
+        <div class="field"><label>الرقم القومي</label><input name="nationalId" value="${esc(row.nationalId||'')}"/></div>
         <div class="field"><label>رقم الجواز</label><input name="passportNumber" value="${esc(row.passportNumber||'')}"/></div>
         <div class="field"><label>الهاتف</label><input name="phone" value="${esc(row.phone||'')}"/></div>
         <div class="field"><label>حالة حجز الطيران</label><select name="flightStatus">
@@ -1571,8 +1599,9 @@
     modalBg.querySelector('#guest-form').addEventListener('submit', async e=>{
       e.preventDefault();
       const fd = new FormData(e.target);
-      const rec = {id: id||uid(), roomId, name:fd.get('name'), passportNumber:fd.get('passportNumber'),
-        phone:fd.get('phone'), flightStatus:fd.get('flightStatus'), notes:fd.get('notes')};
+      const rec = {id: id||uid(), roomId, name:fd.get('name'), nationalId:fd.get('nationalId'), passportNumber:fd.get('passportNumber'),
+        phone:fd.get('phone'), flightStatus:fd.get('flightStatus'), notes:fd.get('notes'),
+        subscriptionId: row.subscriptionId||''};
       if(id) await apiUpdate('accom_guests', rec); else await apiAdd('accom_guests', rec);
       modalBg.remove(); render();
     });
@@ -1679,7 +1708,13 @@
       const row=data.find(r=>String(r.id)===String(b.dataset.del));
       if(!prCanEditRow(key,row)){ alert('ليس لديك صلاحية لحذف هذه البيانات'); return; }
       if(!confirm('تأكيد الحذف؟')) return;
-      await apiDelete(key,b.dataset.del); render();
+      await apiDelete(key,b.dataset.del);
+      if(key==='subscriptions'){
+        const guests = await getData('accom_guests');
+        const linked = guests.find(g=>String(g.subscriptionId||'')===String(b.dataset.del));
+        if(linked) await apiDelete('accom_guests', linked.id);
+      }
+      render();
     }));
   }
 
@@ -1924,6 +1959,7 @@
 
       if(isNew) await apiAdd(key, newRow); else await apiUpdate(key, newRow);
       if(key==='indoor_leads') await maybeCreateSubscriptionFromLead(newRow);
+      if(key==='subscriptions') await syncSubscriptionGuest(newRow);
       modalBg.remove();
       render();
     });
