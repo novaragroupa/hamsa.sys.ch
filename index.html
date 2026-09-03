@@ -593,7 +593,7 @@
     const subs=await getData('subscriptions');
     if(subs.some(s=>String(s.leadId||'')===String(lead.id))) return;
     const sub={
-      id:uid(), leadId:lead.id, customerName:lead.name||'', phone:lead.phone||'',
+      id:uid(), leadId:lead.id, customerName:lead.name||'', nationalId:lead.nationalId||'', phone:lead.phone||'',
       responsiblePerson:lead.responsiblePerson||'', subscriptionDate:new Date().toISOString().slice(0,10),
       packageType:'', subscriptionStatus:'نشط', notes:lead.notes||''
     };
@@ -1679,9 +1679,45 @@
     const mod = MODULES[key];
     if(!mod || !mod.roles.includes(state.user.role)) return;
     const linkRefs = mod.fields.filter(f=>f.type==='linkSelect').map(f=>f.ref);
-    await getDataMany([key, ...(isPRUser()?['employees']:[]), ...linkRefs]);
+    const extraRefs = key==='subscriptions' ? ['indoor_leads'] : [];
+    await getDataMany([key, ...(isPRUser()?['employees']:[]), ...linkRefs, ...extraRefs]);
     const allData = await getData(key);
-    const data = await filterPRData(key, allData);
+    let data = await filterPRData(key, allData);
+
+    // بعض الاشتراكات القديمة قد لا تحتوي على leadId.
+    // في هذه الحالة نربطها تلقائيًا بالمهتم من خلال رقم الهاتف أو اسم العميل.
+    if(key==='subscriptions'){
+      const leads = await getData('indoor_leads');
+      data = data.map(row=>{
+        if(row.leadId) return row;
+
+        const rowPhone = String(row.phone||'').replace(/\D/g,'');
+        const rowName = String(row.customerName||'').trim();
+
+        const lead = leads.find(l=>{
+          const leadPhone = String(l.phone||'').replace(/\D/g,'');
+          const leadName = String(l.name||'').trim();
+
+          const phoneMatch = rowPhone && leadPhone && (
+            rowPhone===leadPhone ||
+            rowPhone.endsWith(leadPhone.slice(-10)) ||
+            leadPhone.endsWith(rowPhone.slice(-10))
+          );
+
+          const nameMatch = rowName && leadName && rowName===leadName;
+
+          return phoneMatch || nameMatch;
+        });
+
+        if(!lead) return row;
+
+        return {
+          ...row,
+          leadId: lead.id || '',
+          nationalId: row.nationalId || lead.nationalId || ''
+        };
+      });
+    }
     const linkMaps = {};
     mod.fields.filter(f=>f.type==='linkSelect').forEach(f=>{
       const refList = cache[f.ref] || [];
@@ -1719,13 +1755,13 @@
   }
 
   function fieldDisplay(f, val, linkMaps, row){
-    // في الاشتراكات: عرض معرّف المهتم + أول 4 أرقام من الرقم القومي + آخر رقمين من الهاتف
+    // في الاشتراكات: معرّف المهتم + أول 4 أرقام من الرقم القومي + آخر رقمين من الهاتف
     if(f.key==='leadId'){
       const leadId = String(row?.leadId || val || '').trim();
-      const nationalId = String(row?.nationalId || '').replace(/\D/g, '');
-      const phone = String(row?.phone || '').replace(/\D/g, '');
+      const nationalId = String(row?.nationalId || '').replace(/\D/g,'');
+      const phone = String(row?.phone || '').replace(/\D/g,'');
 
-      const nationalPart = nationalId.slice(0, 4);
+      const nationalPart = nationalId.slice(0,4);
       const phonePart = phone.slice(-2);
 
       if(!leadId) return '';
@@ -1746,10 +1782,10 @@
       return esc(label || val);
     }
     if(f.key==='status' || f.key==='flightStatus' || f.key==='paymentStatus'){
-      if(!val) return '';
-      const cls = val==='مؤكد' || val==='مدفوع' || val==='نشط' ? 'green'
-        : val==='ملغي' || val==='مرفوض' || val==='غير مدفوع' ? 'red'
-        : val==='انتظار' || val==='معلق' ? 'gold' : 'gray';
+      const map = {'تم التواصل':'blue','تم تحديد معاد':'gold','تم الرفض':'red','تحت التفاوض':'gold',
+        'لم يتم التوصل لأي شيء':'gray','لم تتم الزيارة':'gray','مكتمل':'green','جاري السداد':'gold','متأخر':'red',
+        'تم الحجز':'green','لم يُحجز':'gray','جديد':'blue','تحويل لحجز':'green'};
+      const cls = map[val] || 'gray';
       return val? `<span class="badge ${cls}">${esc(val)}</span>` : '';
     }
     return esc(val);
