@@ -429,17 +429,20 @@
     if(!record.id) record.id=uid();
     await sheetRequest('upsert',table,record);
     cacheUpsertLocal(table, record);
+    if(table==='subscriptions') invalidate('accom_guests');
     return record;
   }
 
   async function apiUpdate(table, record){
     await sheetRequest('upsert',table,record);
     cacheUpsertLocal(table, record);
+    if(table==='subscriptions') invalidate('accom_guests');
   }
 
   async function apiDelete(table, id){
     await sheetRequest('delete',table,{id});
     cacheDeleteLocal(table, id);
+    if(table==='subscriptions') invalidate('accom_guests');
   }
 
   // بيمسح مجموعة IDs بنداء واحد. لو مفيش IDs أو الباك إند القديم رافض action دي،
@@ -450,9 +453,11 @@
     try{
       await sheetRequest('batchDelete',table,{ids});
       ids.forEach(id=>cacheDeleteLocal(table,id));
+      if(table==='subscriptions') invalidate('accom_guests');
     }catch(e){
       console.error('batchDelete fallback', table, e);
       await Promise.all(ids.map(id=>apiDelete(table,id)));
+      if(table==='subscriptions') invalidate('accom_guests');
     }
   }
 
@@ -464,10 +469,12 @@
     try{
       await sheetRequest('batchUpsert',table,{rows:records});
       records.forEach(r=>cacheUpsertLocal(table,r));
+      if(table==='subscriptions') invalidate('accom_guests');
     }catch(e){
       console.error('batchUpsert fallback', table, e);
       await Promise.all(records.map(r=>sheetRequest('upsert',table,r)));
       records.forEach(r=>cacheUpsertLocal(table,r));
+      if(table==='subscriptions') invalidate('accom_guests');
     }
     return records;
   }
