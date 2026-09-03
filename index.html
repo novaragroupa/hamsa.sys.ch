@@ -347,7 +347,7 @@
 
     subscriptions:{ title:'الاشتراكات', icon:'💳', roles:['admin','pr_manager','pr_leader','pr_member'],
       fields:[
-        {key:'leadId', label:'معرّف المهتم', type:'readonly'},
+        {key:'leadId', label:'معرّف المهتم في الاشتراك', type:'readonly'},
         {key:'customerName', label:'اسم العميل', type:'text', required:true},
         {key:'nationalId', label:'الرقم القومي', type:'text'},
         {key:'phone', label:'رقم الهاتف', type:'text'},
@@ -1718,7 +1718,25 @@
     }));
   }
 
-  function fieldDisplay(f, val, linkMaps){
+  function fieldDisplay(f, val, linkMaps, row){
+    // في الاشتراكات: عرض معرّف المهتم + أول 4 أرقام من الرقم القومي + آخر رقمين من الهاتف
+    if(f.key==='leadId'){
+      const leadId = String(row?.leadId || val || '').trim();
+      const nationalId = String(row?.nationalId || '').replace(/\D/g, '');
+      const phone = String(row?.phone || '').replace(/\D/g, '');
+
+      const nationalPart = nationalId.slice(0, 4);
+      const phonePart = phone.slice(-2);
+
+      if(!leadId) return '';
+
+      const parts = [leadId];
+      if(nationalPart) parts.push(nationalPart);
+      if(phonePart) parts.push(phonePart);
+
+      return esc(parts.join(' - '));
+    }
+
     if(f.type==='image'){
       return val? `<img class="row-photo" src="${val}"/>` : `<div class="row-photo"></div>`;
     }
@@ -1728,17 +1746,17 @@
       return esc(label || val);
     }
     if(f.key==='status' || f.key==='flightStatus' || f.key==='paymentStatus'){
-      const map = {'تم التواصل':'blue','تم تحديد معاد':'gold','تم الرفض':'red','تحت التفاوض':'gold',
-        'لم يتم التوصل لأي شيء':'gray','لم تتم الزيارة':'gray','مكتمل':'green','جاري السداد':'gold','متأخر':'red',
-        'تم الحجز':'green','لم يُحجز':'gray','جديد':'blue','تحويل لحجز':'green'};
-      const cls = map[val] || 'gray';
+      if(!val) return '';
+      const cls = val==='مؤكد' || val==='مدفوع' || val==='نشط' ? 'green'
+        : val==='ملغي' || val==='مرفوض' || val==='غير مدفوع' ? 'red'
+        : val==='انتظار' || val==='معلق' ? 'gold' : 'gray';
       return val? `<span class="badge ${cls}">${esc(val)}</span>` : '';
     }
     return esc(val);
   }
 
   function renderRow(mod, row, linkMaps){
-    return `<tr>${mod.fields.map(f=>`<td>${fieldDisplay(f,row[f.key],linkMaps)}</td>`).join('')}
+    return `<tr>${mod.fields.map(f=>`<td>${fieldDisplay(f,row[f.key],linkMaps,row)}</td>`).join('')}
       <td style="white-space:nowrap;">
         <button class="icon-btn" data-edit="${row.id}">✏️</button>
         <button class="icon-btn del" data-del="${row.id}">🗑️</button>
