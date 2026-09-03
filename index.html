@@ -307,22 +307,6 @@
           ref:'employees', refField:'name', filter:{field:'department', value:'علاقات عامة - إن دور'}},
         {key:'notes', label:'ملاحظات', type:'textarea'},
       ]},
-    reception_desk:{ title:'الريسبشن', icon:'🛎️', roles:['admin','reception'],
-      fields:[
-        {key:'visitorName', label:'اسم الزائر', type:'text', required:true},
-        {key:'phone', label:'رقم الهاتف', type:'text'},
-        {key:'purpose', label:'الغرض من الزيارة', type:'text'},
-        {key:'time', label:'الوقت', type:'text'},
-        {key:'notes', label:'ملاحظات', type:'textarea'},
-      ]},
-    reception_media:{ title:'استقبال ميديا', icon:'💬', roles:['admin','reception'],
-      fields:[
-        {key:'name', label:'الاسم', type:'text', required:true},
-        {key:'phone', label:'رقم الهاتف', type:'text'},
-        {key:'platform', label:'المنصة', type:'select', options:['فيسبوك','انستجرام','واتساب','غير ذلك']},
-        {key:'inquiry', label:'الاستفسار', type:'textarea'},
-      ]},
-
     callcenter_feedback:{ title:'فيدباك عملاء العمرة', icon:'📞', roles:['admin','callcenter'],
       fields:[
         {key:'clientName', label:'اسم العميل', type:'text', required:true},
@@ -370,6 +354,9 @@
         {key:'subscriptionDate', label:'تاريخ الاشتراك', type:'date', required:true},
         {key:'packageType', label:'نوع الباقة', type:'select',
           options:['','عمرة كاش','عمرة قسط','عمرة تيسير','تيسير رمضان','حج قرعة تيسير','حج قرعة عادي','حج سياحي']},
+        {key:'tripId', label:'الرحلة (التسكين)', type:'linkSelect', ref:'trips'},
+        {key:'hotelId', label:'الفندق', type:'linkSelect', ref:'accom_hotels', parentKey:'tripId'},
+        {key:'roomId', label:'الغرفة', type:'linkSelect', ref:'accom_rooms', parentKey:'hotelId'},
         {key:'subscriptionStatus', label:'حالة الاشتراك', type:'select', options:['نشط','مكتمل','ملغي']},
         {key:'notes', label:'ملاحظات', type:'textarea'},
       ]},
@@ -525,6 +512,13 @@
 
   function uid(){ return 'id'+Math.random().toString(36).slice(2,10); }
   function esc(s){ return (s===undefined||s===null)?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function linkLabel(ref, r){
+    if(!r) return '';
+    if(ref==='trips') return (r.label? r.label+' — ':'') + (r.date||'بدون تاريخ');
+    if(ref==='accom_hotels') return r.name + (r.location? ' — '+r.location : '');
+    if(ref==='accom_rooms') return 'غرفة ' + (r.roomNumber||'');
+    return r.name || r.title || r.id;
+  }
 
 
   /* ---------------- PR access control ---------------- */
@@ -982,6 +976,7 @@
       </div></form>
     </div>`;
     document.body.appendChild(modalBg);
+
     modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
     modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
     modalBg.querySelector('#ledger-form').addEventListener('submit', async e=>{
@@ -1647,9 +1642,15 @@
   async function renderModule(page, key){
     const mod = MODULES[key];
     if(!mod || !mod.roles.includes(state.user.role)) return;
-    await getDataMany(isPRUser() ? [key,'employees'] : [key]);
+    const linkRefs = mod.fields.filter(f=>f.type==='linkSelect').map(f=>f.ref);
+    await getDataMany([key, ...(isPRUser()?['employees']:[]), ...linkRefs]);
     const allData = await getData(key);
     const data = await filterPRData(key, allData);
+    const linkMaps = {};
+    mod.fields.filter(f=>f.type==='linkSelect').forEach(f=>{
+      const refList = cache[f.ref] || [];
+      linkMaps[f.key] = Object.fromEntries(refList.map(r=>[r.id, linkLabel(f.ref, r)]));
+    });
     page.innerHTML = `
       <div class="page-head">
         <h2>${mod.icon} ${esc(mod.title)}</h2>
@@ -1659,7 +1660,7 @@
       <div class="card">
         ${data.length? `<div class="table-wrap"><table>
           <thead><tr>${mod.fields.map(f=>`<th>${esc(f.label)}</th>`).join('')}<th></th></tr></thead>
-          <tbody>${data.map(row=>renderRow(mod,row)).join('')}</tbody>
+          <tbody>${data.map(row=>renderRow(mod,row,linkMaps)).join('')}</tbody>
         </table></div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد بيانات بعد — ابدأ بالإضافة</div>`}
       </div>`;
     document.getElementById('add-btn').addEventListener('click', ()=> key==='employees' ? openEmployeeAccountForm() : openForm(key, null));
@@ -1675,9 +1676,14 @@
     }));
   }
 
-  function fieldDisplay(f, val, allData){
+  function fieldDisplay(f, val, linkMaps){
     if(f.type==='image'){
       return val? `<img class="row-photo" src="${val}"/>` : `<div class="row-photo"></div>`;
+    }
+    if(f.type==='linkSelect'){
+      if(!val) return '';
+      const label = linkMaps && linkMaps[f.key] && linkMaps[f.key][val];
+      return esc(label || val);
     }
     if(f.key==='status' || f.key==='flightStatus' || f.key==='paymentStatus'){
       const map = {'تم التواصل':'blue','تم تحديد معاد':'gold','تم الرفض':'red','تحت التفاوض':'gold',
@@ -1689,8 +1695,8 @@
     return esc(val);
   }
 
-  function renderRow(mod, row){
-    return `<tr>${mod.fields.map(f=>`<td>${fieldDisplay(f,row[f.key])}</td>`).join('')}
+  function renderRow(mod, row, linkMaps){
+    return `<tr>${mod.fields.map(f=>`<td>${fieldDisplay(f,row[f.key],linkMaps)}</td>`).join('')}
       <td style="white-space:nowrap;">
         <button class="icon-btn" data-edit="${row.id}">✏️</button>
         <button class="icon-btn del" data-del="${row.id}">🗑️</button>
@@ -1804,7 +1810,7 @@
   async function openForm(key, id){
     const mod = MODULES[key];
     if(!mod || !mod.roles.includes(state.user.role)) return;
-    const refKeys = mod.fields.filter(f=>f.type==='dynamicSelect').map(f=>f.ref);
+    const refKeys = mod.fields.filter(f=>f.type==='dynamicSelect'||f.type==='linkSelect').map(f=>f.ref);
     await getDataMany([key, 'employees', ...refKeys]);
     const list = await getData(key);
     const row = id? list.find(r=>r.id===id) : {};
@@ -1822,6 +1828,13 @@
           }
         }
         refOptions[f.key] = refList.map(r=>r[f.refField]);
+      } else if(f.type==='linkSelect'){
+        let refList = await getData(f.ref);
+        if(f.parentKey){
+          const parentVal = row? (row[f.parentKey]||'') : '';
+          refList = parentVal ? refList.filter(r=> String(r[f.parentKey])===String(parentVal)) : [];
+        }
+        refOptions[f.key] = refList.map(r=>({id:r.id, label: linkLabel(f.ref, r)}));
       }
     }
 
@@ -1838,6 +1851,31 @@
       </div></form>
     </div>`;
     document.body.appendChild(modalBg);
+
+    const cascadeFields = mod.fields.filter(f=>f.type==='linkSelect' && f.parentKey);
+    if(cascadeFields.length){
+      const refCache = {};
+      for(const f of cascadeFields){ refCache[f.ref] = await getData(f.ref); }
+      const fillOptions = (field, parentVal)=>{
+        const sel = modalBg.querySelector(`[name="${field.key}"]`);
+        if(!sel) return;
+        const list = parentVal? refCache[field.ref].filter(r=>String(r[field.parentKey])===String(parentVal)) : [];
+        sel.innerHTML = `<option value="">— بدون —</option>` + list.map(r=>`<option value="${esc(r.id)}">${esc(linkLabel(field.ref,r))}</option>`).join('');
+      };
+      cascadeFields.forEach(f=>{
+        const parentSel = modalBg.querySelector(`[name="${f.parentKey}"]`);
+        if(!parentSel) return;
+        parentSel.addEventListener('change', ()=>{
+          fillOptions(f, parentSel.value);
+          const grandChild = cascadeFields.find(gc=>gc.parentKey===f.key);
+          if(grandChild){
+            const gcSel = modalBg.querySelector(`[name="${grandChild.key}"]`);
+            if(gcSel) gcSel.innerHTML = `<option value="">— بدون —</option>`;
+          }
+        });
+      });
+    }
+
     modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
     modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
 
@@ -1895,6 +1933,12 @@
       const opts = refOptions[f.key]||[];
       inner = `<select name="${f.key}" ${f.required?'required':''}><option value="">اختر...</option>
         ${opts.map(o=>`<option value="${esc(o)}" ${o===val?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+    } else if(f.type==='linkSelect'){
+      const opts = refOptions[f.key]||[];
+      inner = `<select name="${f.key}" data-linkselect="${f.key}"${f.parentKey?` data-parent-key="${f.parentKey}"`:''}>
+        <option value="">— بدون —</option>
+        ${opts.map(o=>`<option value="${esc(o.id)}" ${String(o.id)===String(val)?'selected':''}>${esc(o.label)}</option>`).join('')}
+      </select>`;
     } else if(f.type==='textarea'){
       inner = `<textarea name="${f.key}" rows="3">${esc(val)}</textarea>`;
     } else if(f.type==='image'){
