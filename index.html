@@ -42,7 +42,7 @@
     position:relative;display:flex;align-items:center;justify-content:center;}
   .arch-top::after{content:"";position:absolute;bottom:-1px;left:50%;transform:translateX(-50%);
     width:120px;height:60px;background:#fff;border-radius:60px 60px 0 0;}
-  .arch-top img{height:56px;position:relative;z-index:2;margin-top:-10px;filter:brightness(0) invert(1);}
+  .arch-top img{height:56px;position:relative;z-index:2;margin-top:-10px;background:#fff;border-radius:10px;padding:4px 6px;}
   .login-body{padding:38px 32px 32px;}
   .login-body h1{font-size:20px;font-weight:800;margin:0 0 4px;color:var(--navy-900);text-align:center;}
   .login-body p.sub{text-align:center;color:var(--muted);font-size:13px;margin:0 0 26px;}
@@ -65,7 +65,7 @@
   .sidebar{width:250px;background:linear-gradient(180deg,var(--navy-900),var(--navy-800));color:#fff;
     display:flex;flex-direction:column;flex-shrink:0;}
   .sidebar-head{padding:22px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,.1);}
-  .sidebar-head img{height:34px;filter:brightness(0) invert(1);}
+  .sidebar-head img{height:34px;background:#fff;border-radius:8px;padding:3px 5px;}
   .sidebar-head span{font-weight:800;font-size:15px;}
   .nav{flex:1;overflow-y:auto;padding:14px 10px;}
   .nav-item{display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;color:#dfe6f2;
@@ -216,12 +216,10 @@
 
 <script>
 (function(){
-  const LOGO = "REPLACE_WITH_YOUR_ORIGINAL_LOGO_BASE64_STRING_FROM_index.html";
-  /* ⚠️ هام جدًا: السطر اللي فوق ده placeholder فقط. النص الأصلي بتاع اللوجو
-     طوله أكتر من 14000 حرف، وإعادة كتابته يدويًا فيها خطر تلف الصورة بدون داعي.
-     كل حاجة تانية في هذا الملف معدّلة ومكتملة فعليًا حسب طلبك — كل اللي محتاجه
-     إنك تفتح نسخة index.html الحالية عندك، تدوّر على "const LOGO = " وتنسخ
-     الـ base64 string اللي بعدها، وتحطها هنا بدل السطر ده. */
+  const LOGO = "logo.png";
+  /* اللوجو بقى بيتحمّل من ملف صورة منفصل اسمه logo.png، لازم يتحط في نفس
+     المجلد اللي فيه index.html على GitHub (أو أي استضافة) عشان الرابط
+     النسبي ده يشتغل صح. */
   /* النظام يعمل بدون Supabase. الحسابات والبيانات تُحفظ في Google Sheets. */
   async function sha256(text){
     const data = new TextEncoder().encode(String(text));
@@ -279,8 +277,8 @@
     visits:{ title:'تقارير الزيارات', icon:'📋', roles:['admin','pr_out'],
       fields:[
         {key:'companyName', label:'الشركة', type:'text', required:true},
-        {key:'visitedBy', label:'المندوب اللي عمل الزيارة', type:'dynamicSelect',
-          ref:'employees', refField:'name', filter:{field:'department', value:'علاقات عامة - أوت دور'}},
+        {key:'visitedBy', label:'الموظف اللي عمل الزيارة', type:'dynamicSelect',
+          ref:'employees', refField:'name'},
         {key:'date', label:'تاريخ الزيارة', type:'date'},
         {key:'status', label:'حالة الزيارة', type:'select',
           options:['تم التواصل','لم تتم الزيارة','تم تحديد معاد','تم الرفض','تحت التفاوض','لم يتم التوصل لأي شيء']},
@@ -1987,9 +1985,24 @@
     if(!mod || !mod.roles.includes(state.user.role)) return;
     const linkRefs = mod.fields.filter(f=>f.type==='linkSelect').map(f=>f.ref);
     const extraRefs = key==='subscriptions' ? ['indoor_leads'] : [];
-    await getDataMany([key, ...(isPRUser()?['employees']:[]), ...linkRefs, ...extraRefs]);
+    await getDataMany([key, ...((isPRUser()||key==='visits')?['employees']:[]), ...linkRefs, ...extraRefs]);
     const allData = await getData(key);
     let data = await filterPRData(key, allData);
+
+    // تقارير الزيارات: كل تيم يشوف بس زياراته هو (اللي عملها موظفين تيمه)، الأدمن يشوف الكل.
+    // لو الموظف مش مربوط بأي تيم، بيشوف زياراته الشخصية بس كإجراء آمن افتراضي.
+    if(key==='visits' && state.user.role!=='admin'){
+      const emp = await currentEmployeeFresh();
+      const myTeam = emp?.team || '';
+      if(myTeam){
+        const employees = await getData('employees');
+        const teamNames = new Set(employees.filter(e=>e.team===myTeam).map(e=>e.name));
+        data = data.filter(r=> teamNames.has(r.visitedBy));
+      } else {
+        const myName = emp?.name || state.user.name;
+        data = data.filter(r=> r.visitedBy===myName);
+      }
+    }
 
     // بعض الاشتراكات القديمة قد لا تحتوي على leadId.
     // في هذه الحالة نربطها تلقائيًا بالمهتم من خلال رقم الهاتف أو اسم العميل.
@@ -2234,6 +2247,12 @@
             const names=await prAllowedNames();
             refList=refList.filter(r=>names.has(r.name));
           }
+        }
+        // تقارير الزيارات: كل تيم يشوف ويسجّل بس على موظفي تيمه هو، الأدمن يشوف الكل
+        if(key==='visits' && f.key==='visitedBy' && state.user.role!=='admin'){
+          const emp = await currentEmployeeFresh();
+          const myTeam = emp?.team || '';
+          refList = myTeam ? refList.filter(r=>r.team===myTeam) : refList.filter(r=>r.name===(emp?.name||state.user.name));
         }
         refOptions[f.key] = refList.map(r=>r[f.refField]);
       } else if(f.type==='linkSelect'){
