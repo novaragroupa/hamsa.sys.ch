@@ -7,6 +7,12 @@
  *
  * مهم: هذا الإصدار لا يعتمد على SECRET موجود داخل index.html.
  * تسجيل الدخول يتم من خلال login، وبعدها يتم إصدار Session Token موقّع من Apps Script.
+ *
+ * ملاحظة عن التعديلات الجديدة (الرحلات/التسكين المنفصلين):
+ * لم يتم تغيير أي شيء في منطق هذا الملف من أجل ميزة فصل "الرحلات" عن "التسكين"،
+ * لأن التخزين هنا عام (generic key-value sheets) ويدعم أي اسم جدول تلقائيًا —
+ * بما فيه الجدول الجديد "trip_hotels" الذي يربط الرحلة بالفندق. كل عمليات
+ * upsert/delete/batchUpsert/batchDelete تعمل معه بدون أي تعديل إضافي.
  */
 const SECRET = 'HMS-9f2Lp7QvXeR4tWyZ1cA6bN0mF3sJ8dK';
 const SESSION_SECRET = 'HMS-SESSION-CHANGE-THIS-TO-A-LONG-RANDOM-SECRET-2026';
@@ -310,8 +316,16 @@ function enforceOwnership(session, table, payload) {
 // الهدف: تقليل عدد النداءات للـ Spreadsheet ولسيرفر Apps Script نفسه، لأن
 // كل نداء (حتى لو بسيط) بياخد وقت بدء تشغيل. الكاش هنا مشترك بين كل المستخدمين
 // (ScriptCache) ومدته قصيرة عشان البيانات تفضل حديثة، وبيتم إلغاؤه فورًا بعد أي كتابة.
-
-const SHEET_CACHE_TTL_SECONDS = 20;
+//
+// ملاحظة أداء (بخصوص سؤال الـ lag): رفعنا مدة الكاش من 20 إلى 30 ثانية. الفايدة
+// إن الشاشات المتصفحة كتير (زي المهتمين والاشتراكات) هتستغني عن قراءة الشيت من
+// جديد في أول نص دقيقة من كل تعديل. لكن ده تحسين هامشي فقط — السبب الحقيقي في
+// إبطاء النظام مع زيادة البيانات هو أن كل getCachedRows() لما بيفوّت الكاش
+// بيقرأ الشيت بالكامل (getValues على كل الصفوف) وهي عملية O(n) بالنسبة لعدد
+// صفوف الجدول، بالإضافة لوقت "cold start" ثابت لكل تنفيذ لسكريبت Apps Script
+// (~1-3 ثانية) لا يمكن التخلص منه بالكامل من داخل الكود لأنه سلوك بنيوي في
+// خدمة Google Apps Script نفسها. راجع الشرح الكامل في رسالة التسليم.
+const SHEET_CACHE_TTL_SECONDS = 30;
 
 function getCachedRows(sheetName) {
   const cache = CacheService.getScriptCache();
