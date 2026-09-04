@@ -216,10 +216,10 @@
 
 <script>
 (function(){
-  const LOGO = "logo.png";
-  /* اللوجو بقى بيتحمّل من ملف صورة منفصل اسمه logo.png، لازم يتحط في نفس
-     المجلد اللي فيه index.html على GitHub (أو أي استضافة) عشان الرابط
-     النسبي ده يشتغل صح. */
+  const LOGO = "assets/logo.png";
+  /* اللوجو بقى بيتحمّل من ملف صورة منفصل، لازم يتحط في فولدر اسمه assets
+     جنب index.html (يعني المسار يكون: assets/logo.png) على GitHub (أو أي
+     استضافة) عشان الرابط النسبي ده يشتغل صح. */
   /* النظام يعمل بدون Supabase. الحسابات والبيانات تُحفظ في Google Sheets. */
   async function sha256(text){
     const data = new TextEncoder().encode(String(text));
