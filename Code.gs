@@ -320,7 +320,7 @@ function enforceOwnership(session, table, payload) {
 function backfillMissingIds(sheet) {
   const lastRow = sheet.getLastRow();
   const lastCol = sheet.getLastColumn();
-  if (lastRow < 2 || lastCol < 1) return;
+  if (lastRow < 2 || lastCol < 1) return false;
   const headersRow = sheet.getRange(1,1,1,lastCol).getValues()[0].map(String);
   let idCol = headersRow.indexOf('id') + 1;
   if (!idCol) { sheet.getRange(1, lastCol+1).setValue('id'); idCol = lastCol+1; }
@@ -335,12 +335,13 @@ function backfillMissingIds(sheet) {
     }
   }
   if(changed) sheet.getRange(2, idCol, numRows, 1).setValues(idValues);
+  return changed;
 }
 
 function backfillLeadCodes(sheet) {
   const lastRow = sheet.getLastRow();
   const lastCol = sheet.getLastColumn();
-  if (lastRow < 2) return;
+  if (lastRow < 2) return false;
   const headersRow = sheet.getRange(1,1,1,lastCol).getValues()[0].map(String);
   let codeCol = headersRow.indexOf('code') + 1;
   const phoneCol = headersRow.indexOf('phone') + 1;
@@ -363,6 +364,7 @@ function backfillLeadCodes(sheet) {
     }
   }
   if(changed) sheet.getRange(2, codeCol, numRows, 1).setValues(codeValues);
+  return changed;
 }
 
 function generateLeadCode(phone, dateObj) {
@@ -371,6 +373,100 @@ function generateLeadCode(phone, dateObj) {
   const dd = String(dateObj.getDate()).padStart(2,'0');
   const mm = String(dateObj.getMonth()+1).padStart(2,'0');
   return 'ID' + last4 + dd + mm;
+}
+
+// بيربط كل صف في subscriptions بالمهتم (lead) بتاعه في indoor_leads (بمطابقة
+// التليفون أو الاسم) وياخد منه code و id (كـ leadId) ويحطهم في صف الاشتراك.
+// من غير ده، الكود مبيظهرش إلا لو حد فتح شاشة الاشتراكات في النظام نفسه
+// (لأن الحساب كان بيتم في الواجهة بس)، فلو الصف اتضاف يدوي في الشيت، الكود بيفضل فاضي.
+function backfillSubscriptionCodes(sheet) {
+  const ss = SpreadsheetApp.getActive();
+  const leadsSheet = ss.getSheetByName('indoor_leads');
+  if (!leadsSheet) return false;
+  const leads = readRows(leadsSheet);
+  if (!leads.length) return false;
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return false;
+  let lastCol = sheet.getLastColumn();
+  let headersRow = sheet.getRange(1,1,1,lastCol).getValues()[0].map(String);
+
+  let codeCol = headersRow.indexOf('code') + 1;
+  if (!codeCol) { sheet.getRange(1, lastCol+1).setValue('code'); codeCol = lastCol+1; lastCol++; headersRow.push('code'); }
+
+  let leadIdCol = headersRow.indexOf('leadId') + 1;
+  if (!leadIdCol) { sheet.getRange(1, lastCol+1).setValue('leadId'); leadIdCol = lastCol+1; lastCol++; headersRow.push('leadId'); }
+
+  const phoneCol = headersRow.indexOf('phone') + 1;
+  const nameCol = headersRow.indexOf('customerName') + 1;
+
+  const numRows = lastRow - 1;
+  const codeValues = sheet.getRange(2, codeCol, numRows, 1).getValues();
+  const leadIdValues = sheet.getRange(2, leadIdCol, numRows, 1).getValues();
+  const phoneValues = phoneCol ? sheet.getRange(2, phoneCol, numRows, 1).getValues() : [];
+  const nameValues = nameCol ? sheet.getRange(2, nameCol, numRows, 1).getValues() : [];
+
+  let changed = false;
+  for (let i=0;i<numRows;i++){
+    if (codeValues[i][0]) continue; // عنده code خلاص، مش هنلمسه
+    const rowPhoneDigits = String(phoneValues[i] ? phoneValues[i][0] : '').replace(/\D/g,'');
+    const rowName = String(nameValues[i] ? nameValues[i][0] : '').trim();
+    const lead = leads.find(function(l){
+      const leadPhoneDigits = String(l.phone||'').replace(/\D/g,'');
+      const leadName = String(l.name||'').trim();
+      const phoneMatch = rowPhoneDigits && leadPhoneDigits && (
+        rowPhoneDigits === leadPhoneDigits ||
+        rowPhoneDigits.slice(-10) === leadPhoneDigits.slice(-10)
+      );
+      const nameMatch = rowName && leadName && rowName === leadName;
+      return phoneMatch || nameMatch;
+    });
+    if (lead) {
+      codeValues[i][0] = lead.code || '';
+      leadIdValues[i][0] = lead.id || '';
+      changed = true;
+    }
+  }
+  if (changed) {
+    sheet.getRange(2, codeCol, numRows, 1).setValues(codeValues);
+    sheet.getRange(2, leadIdCol, numRows, 1).setValues(leadIdValues);
+  }
+  return changed;
+}
+
+/* ---------------- Auto backfill بدون فتح النظام (Trigger مستقل) ---------------- */
+// المشكلة: backfillMissingIds/backfillLeadCodes بتشتغل بس جوه getCachedRows، يعني
+// لازم حد يفتح شاشة المهتمين في النظام عشان تتنفذ. لو حد ضاف صف يدوي في الشيت
+// وماحدش فتح النظام بعده، الصف ده هيفضل من غير id أو code لحد ما حد يفتح الشاشة.
+//
+// الحل: Trigger زمني مستقل (Time-driven) بيشتغل لوحده كل شوية دقايق جوه Google
+// نفسها، بدون أي علاقة بفتح النظام، وبيتأكد من كل الجداول المهمة ويمسح الكاش
+// القديم بتاعها عشان الواجهة تاخد النسخة المحدثة على طول.
+//
+// إزاي تفعّله (مرة واحدة بس):
+// 1) من محرر Apps Script: Triggers (الساعة على الشمال) > Add Trigger
+// 2) Choose which function to run: runAutoBackfillAllSheets
+// 3) Select event source: Time-driven
+// 4) Select type of time based trigger: Minutes timer
+// 5) Select minute interval: Every 5 minutes (أو حسب رغبتك)
+// 6) Save، وهيطلب صلاحيات مرة واحدة بس.
+function runAutoBackfillAllSheets() {
+  const ss = SpreadsheetApp.getActive();
+  // ضيف هنا أي جدول محتاج يتراجع تلقائيًا (id لازم لكل الجداول دي، والـ code لـ indoor_leads بس)
+  const tablesToCheck = ['indoor_leads', 'indoor_data', 'subscriptions', 'pr_member_data', 'employees', 'teams'];
+  tablesToCheck.forEach(function(name){
+    const sheet = ss.getSheetByName(name);
+    if (!sheet) return;
+    let changedIds = false, changedCodes = false;
+    try { changedIds = backfillMissingIds(sheet); } catch(_) {}
+    if (name === 'indoor_leads') {
+      try { changedCodes = backfillLeadCodes(sheet); } catch(_) {}
+    }
+    if (name === 'subscriptions') {
+      try { changedCodes = backfillSubscriptionCodes(sheet) || changedCodes; } catch(_) {}
+    }
+    if (changedIds || changedCodes) invalidateCachedRows(name);
+  });
 }
 
 /* ---------------- Performance: caching + batch ops ---------------- */
@@ -405,6 +501,9 @@ function getCachedRows(sheetName) {
     try { backfillMissingIds(sheet); } catch(_) {}
     if (sheetName === 'indoor_leads') {
       try { backfillLeadCodes(sheet); } catch(_) {}
+    }
+    if (sheetName === 'subscriptions') {
+      try { backfillSubscriptionCodes(sheet); } catch(_) {}
     }
   }
 
