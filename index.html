@@ -217,9 +217,8 @@
 <script>
 (function(){
   const LOGO = "logo.png";
-  /* اللوجو بقى بيتحمّل من ملف صورة منفصل، لازم يتحط في فولدر اسمه assets
-     جنب index.html (يعني المسار يكون: assets/logo.png) على GitHub (أو أي
-     استضافة) عشان الرابط النسبي ده يشتغل صح. */
+  /* اللوجو بيتحمّل من ملف صورة اسمه logo.png، موجود في نفس مستوى index.html
+     في الريبو (root) — زي ما هو فعليًا على GitHub دلوقتي. */
   /* النظام يعمل بدون Supabase. الحسابات والبيانات تُحفظ في Google Sheets. */
   async function sha256(text){
     const data = new TextEncoder().encode(String(text));
@@ -2047,35 +2046,89 @@
       const leads = cache['indoor_leads'] || [];
       linkMaps.__leadCodes = Object.fromEntries(leads.map(l=>[l.id, l.code||'']));
     }
+
+    state.moduleSearch = state.moduleSearch || {};
+    const searchTerm = state.moduleSearch[key] || '';
+
+    const bindTableEvents = (container, visibleData)=>{
+      container.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click', ()=>{
+        const row=visibleData.find(r=>String(r.id)===String(b.dataset.edit));
+        if(prCanEditRow(key,row)) openForm(key,b.dataset.edit); else alert('ليس لديك صلاحية لتعديل هذه البيانات');
+      }));
+      container.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', async ()=>{
+        const row=visibleData.find(r=>String(r.id)===String(b.dataset.del));
+        if(!prCanEditRow(key,row)){ alert('ليس لديك صلاحية لحذف هذه البيانات'); return; }
+        if(!confirm('تأكيد الحذف؟')) return;
+        await apiDelete(key,b.dataset.del);
+        if(key==='subscriptions'){
+          const guests = await getData('accom_guests');
+          const linked = guests.find(g=>String(g.subscriptionId||'')===String(b.dataset.del));
+          if(linked) await apiDelete('accom_guests', linked.id);
+        }
+        render();
+      }));
+    };
+
+    const tableSectionHtml = (visibleData)=>{
+      if(!data.length) return `<div class="empty-state"><div class="big">📭</div>لا توجد بيانات بعد — ابدأ بالإضافة</div>`;
+      if(!visibleData.length) return `<div class="empty-state"><div class="big">🔍</div>لا توجد نتائج مطابقة للبحث</div>`;
+      return `<div class="table-wrap"><table>
+          <thead><tr>${mod.fields.map(f=>`<th>${esc(f.label)}</th>`).join('')}<th></th></tr></thead>
+          <tbody>${visibleData.map(row=>renderRow(mod,row,linkMaps)).join('')}</tbody>
+        </table></div>`;
+    };
+
     page.innerHTML = `
       <div class="page-head">
         <h2>${mod.icon} ${esc(mod.title)}</h2>
         <button class="btn-primary btn-gold" id="add-btn" style="width:auto;padding:10px 20px;">+ إضافة</button>
       </div>
       ${isPRUser() && state.user.role!=='pr_manager' ? `<div class="assumption-note">البيانات المعروضة هنا خاصة بنطاق صلاحيتك. لا يتم عرض بيانات أعضاء العلاقات العامة الآخرين.</div>`:''}
-      <div class="card">
-        ${data.length? `<div class="table-wrap"><table>
-          <thead><tr>${mod.fields.map(f=>`<th>${esc(f.label)}</th>`).join('')}<th></th></tr></thead>
-          <tbody>${data.map(row=>renderRow(mod,row,linkMaps)).join('')}</tbody>
-        </table></div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد بيانات بعد — ابدأ بالإضافة</div>`}
-      </div>`;
+      ${data.length? `<div class="card" style="padding:14px 20px;margin-bottom:14px;">
+        <input type="text" id="module-search-input" placeholder="🔍 ابحث في ${esc(mod.title)}..." value="${esc(searchTerm)}"
+          style="width:100%;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);"/>
+      </div>` : ''}
+      <div class="card"><div id="module-table-wrap">${tableSectionHtml(filterModuleRows(mod, data, linkMaps, searchTerm))}</div></div>`;
+
     document.getElementById('add-btn').addEventListener('click', ()=> key==='employees' ? openEmployeeAccountForm() : openForm(key, null));
-    page.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click', ()=>{
-      const row=data.find(r=>String(r.id)===String(b.dataset.edit));
-      if(prCanEditRow(key,row)) openForm(key,b.dataset.edit); else alert('ليس لديك صلاحية لتعديل هذه البيانات');
-    }));
-    page.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', async ()=>{
-      const row=data.find(r=>String(r.id)===String(b.dataset.del));
-      if(!prCanEditRow(key,row)){ alert('ليس لديك صلاحية لحذف هذه البيانات'); return; }
-      if(!confirm('تأكيد الحذف؟')) return;
-      await apiDelete(key,b.dataset.del);
-      if(key==='subscriptions'){
-        const guests = await getData('accom_guests');
-        const linked = guests.find(g=>String(g.subscriptionId||'')===String(b.dataset.del));
-        if(linked) await apiDelete('accom_guests', linked.id);
+
+    let currentVisible = filterModuleRows(mod, data, linkMaps, searchTerm);
+    bindTableEvents(document.getElementById('module-table-wrap'), currentVisible);
+
+    const searchInput = document.getElementById('module-search-input');
+    if(searchInput){
+      searchInput.addEventListener('input', ()=>{
+        state.moduleSearch[key] = searchInput.value;
+        currentVisible = filterModuleRows(mod, data, linkMaps, searchInput.value);
+        const wrap = document.getElementById('module-table-wrap');
+        wrap.innerHTML = tableSectionHtml(currentVisible);
+        bindTableEvents(wrap, currentVisible);
+      });
+    }
+  }
+
+  // نص قابل للبحث فيه لكل صف: بيحوّل القيم المرتبطة (linkSelect/كود العميل) لنصها
+  // الظاهر للمستخدم بدل الـ id الداخلي، عشان البحث يشتغل بالاسم اللي المستخدم شايفه فعليًا.
+  function rowSearchText(mod, row, linkMaps){
+    const parts = mod.fields.map(f=>{
+      const v = row[f.key];
+      if(f.key==='leadId'){
+        const code = linkMaps && linkMaps.__leadCodes && linkMaps.__leadCodes[v];
+        return code || v || '';
       }
-      render();
-    }));
+      if(f.type==='linkSelect'){
+        const label = linkMaps && linkMaps[f.key] && linkMaps[f.key][v];
+        return label || v || '';
+      }
+      if(f.type==='image') return '';
+      return v==null? '' : String(v);
+    });
+    return parts.join(' ').toLowerCase();
+  }
+  function filterModuleRows(mod, data, linkMaps, searchTerm){
+    const term = (searchTerm||'').trim().toLowerCase();
+    if(!term) return data;
+    return data.filter(r=> rowSearchText(mod, r, linkMaps).includes(term));
   }
 
   function fieldDisplay(f, val, linkMaps, row){
