@@ -312,6 +312,67 @@ function enforceOwnership(session, table, payload) {
   return p;
 }
 
+/* ---------------- Auto backfill (id / lead code) ---------------- */
+// الهدف: أي صف يتضاف في أي جدول (سواء من النظام أو يدويًا في الشيت) يتاخد له
+// id تلقائي لو ناقص، وأي صف في indoor_leads يتاخد له code تلقائي لو ناقص.
+// بيتنفذوا من جوه getCachedRows نفسها قبل أي قراءة، عشان يشتغلوا في كل الحالات.
+
+function backfillMissingIds(sheet) {
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 1) return;
+  const headersRow = sheet.getRange(1,1,1,lastCol).getValues()[0].map(String);
+  let idCol = headersRow.indexOf('id') + 1;
+  if (!idCol) { sheet.getRange(1, lastCol+1).setValue('id'); idCol = lastCol+1; }
+
+  const numRows = lastRow - 1;
+  const idValues = sheet.getRange(2, idCol, numRows, 1).getValues();
+  let changed = false;
+  for (let i=0;i<numRows;i++){
+    if(!idValues[i][0]){
+      idValues[i][0] = 'id' + Utilities.getUuid().replace(/-/g,'').slice(0,10);
+      changed = true;
+    }
+  }
+  if(changed) sheet.getRange(2, idCol, numRows, 1).setValues(idValues);
+}
+
+function backfillLeadCodes(sheet) {
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow < 2) return;
+  const headersRow = sheet.getRange(1,1,1,lastCol).getValues()[0].map(String);
+  let codeCol = headersRow.indexOf('code') + 1;
+  const phoneCol = headersRow.indexOf('phone') + 1;
+  const regDateCol = headersRow.indexOf('registrationDate') + 1;
+  if (!codeCol) { sheet.getRange(1, lastCol+1).setValue('code'); codeCol = lastCol+1; }
+
+  const numRows = lastRow - 1;
+  const codeValues = sheet.getRange(2, codeCol, numRows, 1).getValues();
+  const phoneValues = phoneCol ? sheet.getRange(2, phoneCol, numRows, 1).getValues() : [];
+  const regValues = regDateCol ? sheet.getRange(2, regDateCol, numRows, 1).getValues() : [];
+
+  let changed = false;
+  for (let i=0;i<numRows;i++){
+    if(!codeValues[i][0]){
+      const phone = phoneValues[i] ? phoneValues[i][0] : '';
+      const regRaw = regValues[i] ? regValues[i][0] : '';
+      const d = regRaw ? new Date(regRaw) : new Date();
+      codeValues[i][0] = generateLeadCode(phone, isNaN(d) ? new Date() : d);
+      changed = true;
+    }
+  }
+  if(changed) sheet.getRange(2, codeCol, numRows, 1).setValues(codeValues);
+}
+
+function generateLeadCode(phone, dateObj) {
+  const digits = String(phone||'').replace(/\D/g,'');
+  const last4 = (digits.slice(-4) || '0000').padStart(4,'0');
+  const dd = String(dateObj.getDate()).padStart(2,'0');
+  const mm = String(dateObj.getMonth()+1).padStart(2,'0');
+  return 'ID' + last4 + dd + mm;
+}
+
 /* ---------------- Performance: caching + batch ops ---------------- */
 // الهدف: تقليل عدد النداءات للـ Spreadsheet ولسيرفر Apps Script نفسه، لأن
 // كل نداء (حتى لو بسيط) بياخد وقت بدء تشغيل. الكاش هنا مشترك بين كل المستخدمين
@@ -337,6 +398,16 @@ function getCachedRows(sheetName) {
 
   const ss = SpreadsheetApp.getActive();
   const sheet = ss.getSheetByName(sheetName);
+
+  // نتأكد من الـ id (لكل الجداول) وكود المهتم (لـ indoor_leads فقط) قبل أي قراءة،
+  // عشان يشتغل تلقائيًا حتى لو الصف اتضاف يدويًا في الشيت من غير المرور بالواجهة.
+  if (sheet) {
+    try { backfillMissingIds(sheet); } catch(_) {}
+    if (sheetName === 'indoor_leads') {
+      try { backfillLeadCodes(sheet); } catch(_) {}
+    }
+  }
+
   const rows = sheet ? readRows(sheet) : [];
 
   try {
