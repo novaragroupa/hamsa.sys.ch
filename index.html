@@ -341,15 +341,9 @@
         {key:'hotel', label:'الفندق', type:'text'},
         {key:'flightStatus', label:'حالة حجز الطيران', type:'select', options:['لم يُحجز','تم الحجز']},
       ]},
-    // "التسكين" أعلاه بيدير الفنادق والغرف كمخزون مستقل تمامًا (renderAccommodationSection).
-    // "الرحلات" هنا قسم مستقل بيدير الرحلات وربطها بأي عدد من الفنادق الموجودة في
-    // التسكين (renderTripsHub) — حذف/تعديل رحلة لا يمس الفنادق أو الغرف إطلاقًا.
-    // مصفوفة fields هنا غير مستخدمة في العرض (نفس نمط accommodation)، موجودة فقط
-    // لضبط الصلاحيات ولتوافق شاشة تحليل البيانات.
     trips_hub:{ title:'الرحلات', icon:'🧳', roles:['admin','accommodation','system'],
       fields:[]},
 
-    /* ---------------- علاقات عامة: هيكل الفرق والاشتراكات ---------------- */
     pr_member_data:{ title:'الداتا والأرقام واللينكات', icon:'🔗', roles:['admin','pr_manager','pr_leader','pr_member'],
       fields:[
         {key:'memberId', label:'عضو الفريق', type:'dynamicSelect', ref:'employees', refField:'name'},
@@ -379,9 +373,13 @@
         {key:'tripId', label:'الرحلة (التسكين)', type:'linkSelect', ref:'trips'},
         {key:'hotelId', label:'الفندق', type:'linkSelect', ref:'accom_hotels', parentKey:'tripId'},
         {key:'roomId', label:'الغرفة', type:'linkSelect', ref:'accom_rooms', parentKey:'hotelId'},
+        {key:'lotteryStatus', label:'حالة القرعة', type:'select', options:['لسه مش عارف','فائز','لم يفز']},
+        {key:'travelStatus', label:'حالة السفر', type:'select', options:['لسه مسافر','سافر']},
         {key:'subscriptionStatus', label:'حالة الاشتراك', type:'select', options:['نشط','مكتمل','ملغي']},
         {key:'notes', label:'ملاحظات', type:'textarea'},
       ]},
+
+    winners:{ title:'الفائزون', icon:'🏆', roles:['admin','pr_manager','pr_leader','pr_member'], fields:[]},
   };
 
   const LEDGER_FIELDS = [
@@ -423,8 +421,6 @@
     return data;
   }
 
-  // بيجيب أكتر من جدول بنداء HTTP واحد بس (action=bulk) بدل نداء منفصل لكل جدول،
-  // وده أكبر سبب في إن الشاشات كانت بطيئة: كل نداء لـ Apps Script بياخد وقت بدء تشغيل لوحده.
   async function sheetRequestBulk(tables){
     if(!GOOGLE_SHEETS_WEBHOOK) throw new Error('رابط Google Sheets غير مضبوط');
     if(!HOMSA_SESSION) throw new Error('انتهت جلسة الدخول — سجّل الدخول مرة أخرى');
@@ -467,8 +463,6 @@
     if(table==='subscriptions') invalidate('accom_guests');
   }
 
-  // بيمسح مجموعة IDs بنداء واحد. لو مفيش IDs أو الباك إند القديم رافض action دي،
-  // بيرجع تلقائيًا لطريقة الحذف الفردي (متوازي) عشان النظام يفضل شغال حتى مع نسخة سيرفر قديمة.
   async function apiDeleteMany(table, ids){
     ids = (ids||[]).filter(Boolean);
     if(!ids.length) return;
@@ -483,7 +477,6 @@
     }
   }
 
-  // بيحفظ مجموعة صفوف بنداء واحد، ولو حصل خطأ بيرجع لطريقة الحفظ الفردي (متوازي)
   async function apiAddMany(table, records){
     records = (records||[]).filter(Boolean);
     if(!records.length) return records;
@@ -505,8 +498,6 @@
   async function getData(key){ if(!cache[key]) cache[key] = await loadList(key); return cache[key]; }
   function invalidate(key){ cache[key] = null; }
 
-  // بعد أي حفظ/تعديل/حذف ناجح، بنحدّث الكاش المحلي فورًا بدل ما نمسحه ونرجع نطلب
-  // الجدول تاني من السيرفر (اللي كان بيضاعف وقت كل عملية حفظ أو حذف في النظام).
   function cacheUpsertLocal(table, record){
     if(!cache[table] || !record || record.id===undefined) return;
     const idx = cache[table].findIndex(r=>String(r.id)===String(record.id));
@@ -518,8 +509,6 @@
     cache[table] = cache[table].filter(r=>String(r.id)!==String(id));
   }
 
-  // بيجيب كذا جدول مع بعض على التوازي (نداء واحد للسيرفر لو مش متخزنين، فوري لو متخزنين بالفعل).
-  // بنستخدمها في أول أي شاشة تحتاج أكتر من جدول عشان منستناش كل جدول لوحده بالدور.
   async function getDataMany(keys){
     const need = [...new Set(keys)].filter(k=>!cache[k]);
     if(need.length){
@@ -541,6 +530,16 @@
 
   function uid(){ return 'id'+Math.random().toString(36).slice(2,10); }
   function esc(s){ return (s===undefined||s===null)?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  // أداة debounce عامة: بتأجل تنفيذ الدالة لحد ما المستخدم يوقف عن الكتابة/الضغط
+  // لمدة `wait` مللي ثانية. بنستخدمها في خانات البحث عشان منعملش إعادة رسم كاملة
+  // للجدول مع كل حرف يتكتب (وده كان أكبر سبب لاج محسوس أثناء الكتابة).
+  function debounce(fn, wait){
+    let t;
+    return function(...args){
+      clearTimeout(t);
+      t = setTimeout(()=>fn.apply(this,args), wait);
+    };
+  }
   function roomTypeBadge(t){
     const map = {'رجال':'blue','سيدات':'gold','عائلية':'green'};
     return t? `<span class="badge ${map[t]||'gray'}">${esc(t)}</span>` : `<span class="badge gray">غير محدد</span>`;
@@ -553,8 +552,6 @@
     return r.name || r.title || r.id;
   }
 
-  /* كود العميل: حرفين "ID" + آخر 4 أرقام من رقم الهاتف + تاريخ اليوم (يوم/شهر) بدون فواصل.
-     يُنشأ مرة واحدة فقط عند أول تسجيل ولا يتغيّر بعد ذلك. */
   function generateCustomerCode(phone){
     const digits = String(phone||'').replace(/\D/g,'');
     const last4 = (digits.slice(-4) || '0000').padStart(4,'0');
@@ -564,9 +561,6 @@
     return 'ID' + last4 + dd + mm;
   }
 
-  /* حماية من الضغط المتكرر على زرار "حفظ": بتعطّل الزرار فورًا (قبل أي انتظار
-     شبكة) عشان تمنع إنشاء أكتر من سجل لنفس الإدخال بسبب دبل كليك أو ضغط سريع
-     متكرر. عند فشل الحفظ بترجع الزرار زي ما كان عشان المستخدم يقدر يحاول تاني. */
   function submitGuard(form){
     const btn = form.querySelector('button[type=submit]');
     if(!btn) return {ok:true, release:()=>{}};
@@ -576,10 +570,6 @@
     return {ok:true, release:()=>{ btn.disabled=false; btn.textContent=origText; }};
   }
 
-  /* بيحسب خيارات قائمة linkSelect المتتالية (Trip -> Hotel -> Room). بما إن
-     الفنادق بقت كيان مستقل عن الرحلات، الحالة الخاصة هنا (subscriptions.hotelId)
-     بتجيب فنادق الرحلة المختارة من جدول الربط trip_hotels بدل الاعتماد على حقل
-     tripId قديم داخل الفندق نفسه. */
   async function linkSelectOptionsFor(moduleKey, f, parentVal){
     if(moduleKey==='subscriptions' && f.key==='hotelId' && f.ref==='accom_hotels' && f.parentKey==='tripId'){
       if(!parentVal) return [];
@@ -663,14 +653,12 @@
       gender:'', governorate:'', groupName:'',
       responsiblePerson:lead.responsiblePerson||'', subscriptionDate:new Date().toISOString().slice(0,10),
       packageType:'', installmentMonths:'', installmentAmount:'', downPayment:'',
+      lotteryStatus:'لسه مش عارف', travelStatus:'لسه مسافر',
       subscriptionStatus:'نشط', notes:lead.notes||''
     };
     await apiAdd('subscriptions',sub);
   }
 
-  // بيربط الاشتراك بالتسكين (الفندق/الغرفة) تلقائيًا: لما يتحدد roomId في الاشتراك
-  // بيضيف/يحدّث نزيل في accom_guests علشان يظهر العميل في شاشة "الإسكان" أوتوماتيك.
-  // لو تم شيل الغرفة من الاشتراك بيتشال النزيل المرتبط بيه.
   async function syncSubscriptionGuest(sub){
     const guests = await getData('accom_guests');
     const existing = guests.find(g=>String(g.subscriptionId||'')===String(sub.id));
@@ -695,12 +683,6 @@
     if(existing) await apiUpdate('accom_guests', rec); else await apiAdd('accom_guests', rec);
   }
 
-  /* ---------------- Render router ----------------
-     تحسين أداء مهم: قبل كده كل استدعاء لـ render() كان بيعيد بناء الـ sidebar
-     بالكامل (وكل الأزرار وكل الـ event listeners) حتى لو كل اللي اتغيّر هو
-     محتوى الصفحة الداخلية. ده كان أكبر سبب في الإحساس بالـ lag عند التنقل أو
-     بعد أي حفظ. دلوقتي الـ shell (الـ sidebar + الإطار العام) بيتبني مرة واحدة
-     بس لكل جلسة دخول، وأي render() بعد كده بيحدّث محتوى #page فقط. */
   async function render(){
     if(!state.user){ renderLogin(); return; }
     if(!root.querySelector('.shell')){
@@ -777,7 +759,6 @@
   }
 
   function analyticsAccessibleModules(){
-    // مسؤول تحليل البيانات (analyst) والمدير يقدروا يبنوا لوحات تحليل من أي قسم في النظام
     if(state.user.role==='admin' || state.user.role==='analyst') return Object.entries(MODULES).filter(([k])=>!['companies','callcenter_payments','indoor_data'].includes(k));
     return accessibleModules();
   }
@@ -848,6 +829,7 @@
     else if(state.view==='analytics') await renderAnalytics(page, analyticsAccessibleModules());
     else if(state.view==='accommodation') await renderAccommodationSection(page);
     else if(state.view==='trips_hub') await renderTripsHub(page);
+    else if(state.view==='winners') await renderWinnersSection(page);
     else if(MODULES[state.view]) await renderModule(page, state.view);
   }
 
@@ -1025,7 +1007,6 @@
       </div>`;
 
     if(!sel){
-      // summary per client
       const rows = clients.map(c=>{
         const list = entries.filter(e=>e.clientName===c);
         const totalDebit = list.reduce((s,e)=>s+num_(e.debit),0);
@@ -1125,13 +1106,6 @@
     });
   }
 
-  /* ================================================================
-     Analytics — لوحات تحليل بيانات قابلة للتخصيص لكل قسم
-     كل قسم عنده امكانية يعمل "لوحة" مرتبطة بمصدر بيانات (أي موديول)،
-     ويضيف فيها عناصر تحليل (دائري / أعمدة / جدول / رقم) بنفسه، ويقدر
-     كمان يقسّم أي عنصر حسب "الفريق" لو الحقل مرتبط بموظف.
-     مسؤول تحليل البيانات (analyst) شايف كل الأقسام بدون استثناء.
-     ================================================================ */
   const CHART_COLORS = ['#b3261e','#f2b705','#1a7a4c','#25508f','#a5690a','#6b7280',
     '#8b5cf6','#0891b2','#dc2626','#059669','#d97706','#0284c7'];
 
@@ -1431,36 +1405,6 @@
     });
   }
 
-  /* ================================================================
-     الرحلات (Trips) و التسكين (Hotels/Rooms) — قسمان مستقلان تمامًا:
-
-     - "التسكين" (renderAccommodationSection): يدير الفنادق والغرف كمخزون
-       مستقل بالكامل عن الرحلات. حذف أو تعديل أي رحلة لا يؤثر عليه إطلاقًا.
-
-     - "الرحلات" (renderTripsHub): يدير الرحلات، ويسمح بربط أي عدد من
-       الفنادق (المُعرَّفة أصلاً في "التسكين") بكل رحلة عبر جدول ربط مستقل
-       trip_hotels — بدون تكرار إنشاء الفندق. نفس الفندق ونفس الغرفة يمكن
-       استخدامهما في أكتر من رحلة في نفس الوقت أو في تواريخ مختلفة، لأن
-       النزلاء (accom_guests) بقى ليهم tripId يحدد لأي رحلة ينتمي كل نزيل،
-       فالسعة والإشغال بيتحسبوا لكل رحلة على حدة وليس على مستوى الغرفة ذاتها.
-
-     - حذف رحلة من "الرحلات" يحذف فقط: سجل الرحلة + روابطها بالفنادق
-       (trip_hotels) + نزلاء هذه الرحلة تحديدًا (accom_guests بـ tripId
-       بتاعها) — ولا يحذف الفندق أو الغرف نفسها أبدًا مهما حصل.
-
-     - migration تلقائية (ensureAccommodationMigration) بتحافظ على البيانات
-       القديمة: أي فندق كان مربوط برحلة واحدة بس (الطريقة القديمة عبر حقل
-       tripId داخل الفندق) بييتحول تلقائيًا لرابط trip_hotels، وأي نزيل قديم
-       من غير tripId بياخد tripId الرحلة القديمة دي، من غير ما نحذف أو نلمس
-       أي بيانات فعلية.
-
-     - غرف "التسكين" (accom_rooms) بقى ليها: نوع الغرفة (رجال/سيدات/عائلية)،
-       وتاريخ إتاحة من/إلى، وشاشة "التسكين" بتعرض اسم كل عميل مسجّل على الغرفة
-       (عبر accom_guests) مباشرة، بغض النظر عن الرحلة، لأن الرحلة بقت منفصلة
-       عن الفندق. عدد الحجوزات مقارنة بعدد السراير (capacity) بيتحسب من إجمالي
-       النزلاء المسجلين على الغرفة في كل الجداول.
-     ================================================================ */
-
   let accomMigrationChecked = false;
   async function ensureAccommodationMigration(){
     if(accomMigrationChecked) return;
@@ -1504,7 +1448,6 @@
     page.querySelectorAll('[data-crumb]').forEach(b=>b.addEventListener('click', ()=>handlers[Number(b.dataset.crumb)]()));
   }
 
-  /* ---------------- التسكين: الفنادق والغرف (مستقل تمامًا عن الرحلات) ---------------- */
   async function renderAccommodationSection(page){
     await ensureAccommodationMigration();
     state.accomSecView = state.accomSecView || 'hotels';
@@ -1675,7 +1618,6 @@
     })();
   }
 
-  /* ---------------- الرحلات: رحلة -> فنادق مرتبطة (من مخزون التسكين) -> غرف -> نزلاء الرحلة ---------------- */
   async function renderTripsHub(page){
     await ensureAccommodationMigration();
     state.tripsHubView = state.tripsHubView || 'trips';
@@ -1959,10 +1901,6 @@
   }
 
 
-  /* ================================================================
-     الداتا والأرقام: عرض شبيه بالشيت (تعديل مباشر داخل الجدول)
-     + إمكانية ربط رابط شيت جوجل خاص بالموظفين يفتحوه لسحب أرقام منه.
-     ================================================================ */
   async function renderIndoorDataSheet(page){
     const mod = MODULES.indoor_data;
     await getDataMany(['indoor_data','employees','app_settings']);
@@ -2026,6 +1964,65 @@
     }).join('')}<td><button class="icon-btn del" data-delrow="${row.id}">🗑️</button></td></tr>`;
   }
 
+  /* ---------------- قسم الفائزون ---------------- */
+  async function renderWinnersSection(page){
+    if(!MODULES.winners.roles.includes(state.user.role)) return;
+    await getDataMany(['subscriptions','trips','accom_hotels','accom_rooms']);
+    let data = await filterPRData('subscriptions', await getData('subscriptions'));
+    data = data.filter(r=>String(r.lotteryStatus||'')==='فائز');
+
+    const trips=cache['trips']||[], hotels=cache['accom_hotels']||[], rooms=cache['accom_rooms']||[];
+    const tripMap=Object.fromEntries(trips.map(r=>[r.id,linkLabel('trips',r)]));
+    const hotelMap=Object.fromEntries(hotels.map(r=>[r.id,linkLabel('accom_hotels',r)]));
+    const roomMap=Object.fromEntries(rooms.map(r=>[r.id,linkLabel('accom_rooms',r)]));
+    state.moduleSearch=state.moduleSearch||{};
+    const searchTerm=state.moduleSearch.winners||'';
+    // بنحسب نص البحث لكل صف مرة واحدة بس (مش مع كل حرف يتكتب)، عشان تفادي
+    // إعادة حساب join/toLowerCase على كل الصفوف مع كل ضغطة زر أثناء الكتابة.
+    const searchIndex=data.map(r=>({row:r, text:[r.customerName,r.packageType,r.phone,r.nationalId,r.gender,r.governorate,r.travelStatus,tripMap[r.tripId],hotelMap[r.hotelId],roomMap[r.roomId]].join(' ').toLowerCase()}));
+    const getRows=term=>{
+      term=String(term||'').trim().toLowerCase();
+      return term? searchIndex.filter(x=>x.text.includes(term)).map(x=>x.row) : data;
+    };
+    const tableHtml=rows=>!rows.length
+      ? `<div class="empty-state"><div class="big">${data.length?'🔍':'🏆'}</div>${data.length?'لا توجد نتائج مطابقة للبحث':'لا يوجد فائزون حتى الآن'}</div>`
+      : `<div class="table-wrap"><table><thead><tr><th>العميل</th><th>نوع الاشتراك</th><th>الهاتف</th><th>الرقم القومي</th><th>الجنس</th><th>المحافظة</th><th>حالة القرعة</th><th>الرحلة</th><th>الفندق</th><th>الغرفة</th><th>حالة السفر</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr>
+        <td>${esc(r.customerName||'')}</td><td>${esc(r.packageType||'')}</td><td>${esc(r.phone||'')}</td><td>${esc(r.nationalId||'')}</td><td>${esc(r.gender||'')}</td><td>${esc(r.governorate||'')}</td>
+        <td><span class="badge gold">فائز</span></td>
+        <td><select class="winner-trip-select" data-id="${esc(r.id)}" style="min-width:180px"><option value="">— بدون رحلة —</option>${trips.map(t=>`<option value="${esc(t.id)}" ${String(t.id)===String(r.tripId||'')?'selected':''}>${esc(linkLabel('trips',t))}</option>`).join('')}</select></td>
+        <td>${esc(hotelMap[r.hotelId]||'—')}</td><td>${esc(roomMap[r.roomId]||'—')}</td><td>${esc(r.travelStatus||'لسه مسافر')}</td>
+        <td><button class="icon-btn" data-winner-edit="${esc(r.id)}">✏️</button></td>
+      </tr>`).join('')}</tbody></table></div>`;
+    page.innerHTML=`<div class="page-head"><h2>🏆 الفائزون</h2></div>
+      ${isPRUser()&&state.user.role!=='pr_manager'?`<div class="assumption-note">البيانات المعروضة هنا خاصة بنطاق صلاحيتك.</div>`:''}
+      ${data.length?`<div class="card" style="padding:14px 20px;margin-bottom:14px;"><input type="text" id="winners-search-input" placeholder="🔍 ابحث في الفائزون..." value="${esc(searchTerm)}" style="width:100%;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);"/></div>`:''}
+      <div class="card"><div id="winners-table-wrap">${tableHtml(getRows(searchTerm))}</div></div>`;
+    const bind=container=>{
+      container.querySelectorAll('[data-winner-edit]').forEach(b=>b.addEventListener('click',()=>openForm('subscriptions',b.dataset.winnerEdit)));
+      container.querySelectorAll('.winner-trip-select').forEach(sel=>sel.addEventListener('change',async()=>{
+        const subs=await getData('subscriptions'), row=subs.find(x=>String(x.id)===String(sel.dataset.id)); if(!row)return;
+        sel.disabled=true;
+        try{const updated={...row,tripId:sel.value}; await apiUpdate('subscriptions',updated); await syncSubscriptionGuest(updated); render();}
+        catch(err){console.error(err);alert(err.message||'تعذر تحديث الرحلة');sel.disabled=false;}
+      }));
+    };
+    const wrap=document.getElementById('winners-table-wrap'); bind(wrap);
+    const input=document.getElementById('winners-search-input');
+    if(input){
+      // debounce على البحث: بنستنى المستخدم يوقف عن الكتابة 180ms قبل إعادة رسم
+      // الجدول، بدل ما نعيد الرسم مع كل حرف — ده كان بيسبب لاج واضح في الكتابة.
+      let winnersDebounce;
+      input.addEventListener('input',()=>{
+        state.moduleSearch.winners=input.value;
+        clearTimeout(winnersDebounce);
+        winnersDebounce=setTimeout(()=>{
+          wrap.innerHTML=tableHtml(getRows(input.value));
+          bind(wrap);
+        },180);
+      });
+    }
+  }
+
   /* ---------------- Generic module CRUD renderer ---------------- */
   async function renderModule(page, key){
     const mod = MODULES[key];
@@ -2036,8 +2033,6 @@
     const allData = await getData(key);
     let data = await filterPRData(key, allData);
 
-    // تقارير الزيارات: كل تيم يشوف بس زياراته هو (اللي عملها موظفين تيمه)، الأدمن يشوف الكل.
-    // لو الموظف مش مربوط بأي تيم، بيشوف زياراته الشخصية بس كإجراء آمن افتراضي.
     if(key==='visits' && state.user.role!=='admin'){
       const emp = await currentEmployeeFresh();
       const myTeam = emp?.team || '';
@@ -2051,8 +2046,6 @@
       }
     }
 
-    // بعض الاشتراكات القديمة قد لا تحتوي على leadId.
-    // في هذه الحالة نربطها تلقائيًا بالمهتم من خلال رقم الهاتف أو اسم العميل.
     if(key==='subscriptions'){
       const leads = await getData('indoor_leads');
       data = data.map(row=>{
@@ -2140,17 +2133,33 @@
 
     document.getElementById('add-btn').addEventListener('click', ()=> key==='employees' ? openEmployeeAccountForm() : openForm(key, null));
 
-    let currentVisible = filterModuleRows(mod, data, linkMaps, searchTerm);
+    // بنحسب نص البحث لكل صف مرة واحدة بس هنا عند فتح الصفحة (مش مع كل حرف يتكتب)،
+    // فالفلترة أثناء الكتابة بقت مجرد .includes() سريع على نص جاهز بدل إعادة
+    // بناء النص من كل حقول الصف وكل الـ linkMaps مع كل ضغطة — وده كان أكبر سبب لاج
+    // ملموس أثناء الكتابة في جداول فيها مئات الصفوف (زي الاشتراكات والمهتمين).
+    const searchIndex = data.map(row=>({row, text: rowSearchText(mod, row, linkMaps)}));
+    const filterBySearchIndex = (term)=>{
+      term = (term||'').trim().toLowerCase();
+      return term ? searchIndex.filter(x=>x.text.includes(term)).map(x=>x.row) : data;
+    };
+
+    let currentVisible = filterBySearchIndex(searchTerm);
     bindTableEvents(document.getElementById('module-table-wrap'), currentVisible);
 
     const searchInput = document.getElementById('module-search-input');
     if(searchInput){
+      // debounce: بنستنى المستخدم يوقف عن الكتابة 180ms قبل إعادة رسم الجدول،
+      // بدل ما نعيد الرسم الكامل (وإعادة ربط كل الأزرار) مع كل حرف يتكتب.
+      let debounceTimer;
       searchInput.addEventListener('input', ()=>{
         state.moduleSearch[key] = searchInput.value;
-        currentVisible = filterModuleRows(mod, data, linkMaps, searchInput.value);
-        const wrap = document.getElementById('module-table-wrap');
-        wrap.innerHTML = tableSectionHtml(currentVisible);
-        bindTableEvents(wrap, currentVisible);
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(()=>{
+          currentVisible = filterBySearchIndex(searchInput.value);
+          const wrap = document.getElementById('module-table-wrap');
+          wrap.innerHTML = tableSectionHtml(currentVisible);
+          bindTableEvents(wrap, currentVisible);
+        }, 180);
       });
     }
   }
@@ -2180,8 +2189,6 @@
   }
 
   function fieldDisplay(f, val, linkMaps, row){
-    // في الاشتراكات: نعرض كود العميل الثابت المرتبط بالمهتم لو موجود،
-    // وإلا نرجع للعرض القديم (توافقًا مع السجلات القديمة قبل إضافة الكود).
     if(f.key==='leadId'){
       const leadId = String(row?.leadId || val || '').trim();
       if(!leadId) return '';
@@ -2349,7 +2356,6 @@
             refList=refList.filter(r=>names.has(r.name));
           }
         }
-        // تقارير الزيارات: كل تيم يشوف ويسجّل بس على موظفي تيمه هو، الأدمن يشوف الكل
         if(key==='visits' && f.key==='visitedBy' && state.user.role!=='admin'){
           const emp = await currentEmployeeFresh();
           const myTeam = emp?.team || '';
@@ -2414,7 +2420,6 @@
 
     modalBg.querySelector('#mod-form').addEventListener('submit', async e=>{
       e.preventDefault();
-      // منع الحفظ المتكرر (دبل كليك) اللي كان بيعمل نسخ مكررة من نفس السجل
       const guard = submitGuard(e.target); if(!guard.ok) return;
       try{
         const isNew = !row.id;
@@ -2426,12 +2431,10 @@
           if(el) newRow[f.key] = el.value;
         }
 
-        // كود العميل: يُنشأ مرة واحدة فقط عند أول تسجيل لمهتم/مندوب جديد
         if(key==='indoor_leads' && isNew && !newRow.code){
           newRow.code = generateCustomerCode(newRow.phone);
         }
 
-        /* عضو العلاقات العامة لا يستطيع إنشاء سجل باسم عضو آخر */
         if(isPRUser() && state.user.role==='pr_member'){
           const me=await currentEmployeeFresh(), myName=me?.name||state.user.name;
           if(['indoor_leads','indoor_data','subscriptions'].includes(key)) newRow.responsiblePerson=myName;
@@ -2489,8 +2492,6 @@
   }
 
   (function initAuth(){
-    // بنعرض الشاشة فورًا ببيانات الجلسة المحفوظة محليًا من غير ما ننتظر رد السيرفر،
-    // عشان فتح التطبيق يحس إنه سريع جدًا، وبعدين بنتأكد من صلاحية الجلسة في الخلفية.
     try{
       const saved=localStorage.getItem('homsa_session_user');
       HOMSA_SESSION=localStorage.getItem('homsa_session_token') || '';
