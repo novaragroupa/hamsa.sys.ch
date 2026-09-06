@@ -523,6 +523,31 @@
     const out={}; keys.forEach(k=>out[k]=cache[k]||[]); return out;
   }
 
+  // تحميل مسبق في الخلفية: بعد ما اليوزر يعمل لوجين، بنجيب كل الجداول اللي دوره
+  // يقدر يشوفها بنداء واحد (bulk) من غير ما نستنى النتيجة (مش await في مكان الاستدعاء)،
+  // عشان لما يدوس على أي قسم بعد كده، البيانات تبقى موجودة في الكاش جاهزة على طول
+  // من غير ما يستنى نداء جديد لـ Apps Script (وده أكبر سبب في حس التقيل عند التنقل
+  // بين الصفحات). لو النداء فشل لأي سبب، مفيش أي تأثير على الشغل العادي — كل صفحة
+  // لسه بتجيب بياناتها بنفسها لما تتفتح زي ما كانت بالظبط.
+  async function prefetchAllData(){
+    try{
+      const role = state.user && state.user.role;
+      if(!role) return;
+      const keys = new Set(['employees','dashboards','widgets']);
+      accessibleModules().forEach(([k,m])=>{ if(m.fields && m.fields.length) keys.add(k); });
+      if(MODULES.accommodation.roles.includes(role)){
+        ['accom_hotels','accom_rooms','accom_guests'].forEach(k=>keys.add(k));
+      }
+      if(MODULES.trips_hub.roles.includes(role)){
+        ['trips','trip_hotels','accom_hotels','accom_rooms','accom_guests'].forEach(k=>keys.add(k));
+      }
+      if(MODULES.winners.roles.includes(role)){
+        ['subscriptions','trips','accom_hotels','accom_rooms'].forEach(k=>keys.add(k));
+      }
+      await getDataMany([...keys]);
+    }catch(e){ console.error('background prefetch error', e); }
+  }
+
   /* ---------------- App state ---------------- */
   let state = { user:null, view:'dashboard', sidebarOpen:false, modal:null };
 
@@ -687,6 +712,7 @@
     if(!state.user){ renderLogin(); return; }
     if(!root.querySelector('.shell')){
       buildShell();
+      prefetchAllData(); // من غير await قصدًا: يشتغل في الخلفية ومايأخرش عرض الداشبورد
     } else {
       const sb = root.querySelector('.sidebar');
       if(sb) sb.classList.toggle('open', !!state.sidebarOpen);
