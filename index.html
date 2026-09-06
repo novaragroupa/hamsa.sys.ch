@@ -1542,32 +1542,39 @@
       </div>
       ${crumbsBar([{label:'الفنادق'},{label:hotel.name}])}
       <div class="card">
-        ${rooms.length? `<div class="table-wrap"><table>
-          <thead><tr><th>الغرفة</th><th>النوع</th><th>الإتاحة من</th><th>الإتاحة إلى</th><th>الحجوزات / السراير</th><th>أسماء العملاء المسجلين</th><th></th></tr></thead>
-          <tbody>${rooms.map(r=>{
-            const roomGuests = guests.filter(g=>g.roomId===r.id);
-            const cap = num_(r.capacity)||1;
-            const cnt = roomGuests.length;
-            const over = cnt>cap;
-            const namesHtml = roomGuests.length? roomGuests.map(g=>{
-              const t = trips.find(tr=>tr.id===g.tripId);
-              const tripLbl = t? ' — '+esc(t.label||t.date||'') : '';
-              return esc(g.name||'بدون اسم') + tripLbl;
-            }).join('، ') : '<span style="color:var(--muted)">لا يوجد</span>';
-            return `<tr>
-              <td>🛏️ ${esc(r.roomNumber||'')}</td>
-              <td>${roomTypeBadge(r.roomType)}</td>
-              <td>${esc(r.availableFrom||'—')}</td>
-              <td>${esc(r.availableTo||'—')}</td>
-              <td><span class="badge ${over?'red':'green'}">${cnt} / ${cap}</span></td>
-              <td>${namesHtml}</td>
-              <td style="white-space:nowrap;">
-                <button class="icon-btn" data-editroomstd="${r.id}">✏️</button>
-                <button class="icon-btn del" data-delroomstd="${r.id}">🗑️</button>
-              </td>
-            </tr>`;
-          }).join('')}</tbody>
-        </table></div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد غرف مضافة لهذا الفندق</div>`}
+        ${rooms.length? rooms.map(r=>{
+          const roomGuests = guests.filter(g=>g.roomId===r.id);
+          const cap = num_(r.capacity)||1;
+          const cnt = roomGuests.length;
+          const over = cnt>cap;
+          const guestsTableHtml = roomGuests.length? `<div class="table-wrap"><table>
+              <thead><tr><th>الاسم</th><th>الرقم القومي</th><th>رقم الجواز</th><th>الهاتف</th><th>حالة الطيران</th><th>الرحلة</th></tr></thead>
+              <tbody>${roomGuests.map(g=>{
+                const t = trips.find(tr=>tr.id===g.tripId);
+                const tripLbl = t? esc(t.label||t.date||'') : '—';
+                return `<tr>
+                  <td>${esc(g.name||'بدون اسم')}</td>
+                  <td>${esc(g.nationalId||'—')}</td>
+                  <td>${esc(g.passportNumber||'—')}</td>
+                  <td>${esc(g.phone||'—')}</td>
+                  <td>${fieldDisplay({key:'flightStatus'}, g.flightStatus)}</td>
+                  <td>${tripLbl}</td>
+                </tr>`;
+              }).join('')}</tbody>
+            </table></div>` : `<div class="empty-state" style="padding:16px;"><div class="big">📭</div>لا يوجد نزلاء مسجلين في هذه الغرفة</div>`;
+          return `<div class="card" style="margin-bottom:16px;box-shadow:none;">
+            <div class="page-head" style="margin-bottom:12px;">
+              <h3 style="display:flex;align-items:center;gap:8px;">🛏️ غرفة ${esc(r.roomNumber||'')} ${roomTypeBadge(r.roomType)}
+                <span class="badge ${over?'red':'green'}">${cnt} / ${cap}</span></h3>
+              <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+                <span style="font-size:12.5px;color:var(--muted);">الإتاحة: ${esc(r.availableFrom||'—')} → ${esc(r.availableTo||'—')}</span>
+                <button class="icon-btn" data-editroomstd="${r.id}">✏️ تعديل</button>
+                <button class="icon-btn del" data-delroomstd="${r.id}">🗑️ حذف</button>
+              </div>
+            </div>
+            ${guestsTableHtml}
+          </div>`;
+        }).join('') : `<div class="empty-state"><div class="big">📭</div>لا توجد غرف مضافة لهذا الفندق</div>`}
       </div>`;
     document.getElementById('add-room-std-btn').addEventListener('click', ()=>openStandaloneRoomForm(hotel.id, null, ()=>render()));
     bindCrumbs(page, [ ()=>{ state.accomSecView='hotels'; render(); }, ()=>{} ]);
@@ -2010,7 +2017,7 @@
     const input=document.getElementById('winners-search-input');
     if(input){
       // debounce على البحث: بنستنى المستخدم يوقف عن الكتابة 180ms قبل إعادة رسم
-      // الجدول، بدل ما نعيد الرسم مع كل حرف — ده كان بيسبب لاج واضح في الكتابة.
+      // الجدول، بدل ما نعيد الرسم مع كل حرف يتكتب — ده كان بيسبب لاج واضح في الكتابة.
       let winnersDebounce;
       input.addEventListener('input',()=>{
         state.moduleSearch.winners=input.value;
