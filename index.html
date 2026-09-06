@@ -239,6 +239,12 @@
   const ALEX_AREAS = ['سيدي جابر','سموحة','ستانلي','جليم','لوران','رشدي','الإبراهيمية','فلمنج','محرم بك',
     'كرموز','العطارين','المنشية','باكوس','العجمي','المندرة','أبو قير','سيدي بشر','المعمورة','برج العرب','الأزاريطة'];
 
+  const EGYPT_GOVERNORATES = ['القاهرة','الجيزة','الإسكندرية','الدقهلية','البحر الأحمر','البحيرة','الفيوم','الغربية',
+    'الإسماعيلية','المنوفية','المنيا','القليوبية','الوادي الجديد','السويس','أسوان','أسيوط','بني سويف','بورسعيد',
+    'دمياط','الشرقية','جنوب سيناء','كفر الشيخ','مطروح','الأقصر','قنا','شمال سيناء','سوهاج'];
+
+  const ROOM_TYPES = ['رجال','سيدات','عائلية'];
+
   /* ---------------- Module definitions (generic CRUD engine) ---------------- */
   const MODULES = {
     teams:{ title:'الفرق', icon:'🧩', roles:['admin','hr','pr_manager'],
@@ -360,10 +366,16 @@
         {key:'customerName', label:'اسم العميل', type:'text', required:true},
         {key:'nationalId', label:'الرقم القومي', type:'text'},
         {key:'phone', label:'رقم الهاتف', type:'text'},
+        {key:'gender', label:'جنس العميل', type:'select', options:['ذكر','أنثى'], required:true},
+        {key:'governorate', label:'المحافظة', type:'select', options:EGYPT_GOVERNORATES, required:true},
+        {key:'groupName', label:'اسم المجموعة', type:'text'},
         {key:'responsiblePerson', label:'المسؤول', type:'dynamicSelect', ref:'employees', refField:'name'},
         {key:'subscriptionDate', label:'تاريخ الاشتراك', type:'date', required:true},
         {key:'packageType', label:'نوع الباقة', type:'select',
           options:['','عمرة كاش','عمرة قسط','عمرة تيسير','تيسير رمضان','حج قرعة تيسير','حج قرعة عادي','حج سياحي']},
+        {key:'installmentMonths', label:'عدد شهور التقسيط', type:'number'},
+        {key:'installmentAmount', label:'قيمة القسط', type:'number'},
+        {key:'downPayment', label:'المقدم', type:'number'},
         {key:'tripId', label:'الرحلة (التسكين)', type:'linkSelect', ref:'trips'},
         {key:'hotelId', label:'الفندق', type:'linkSelect', ref:'accom_hotels', parentKey:'tripId'},
         {key:'roomId', label:'الغرفة', type:'linkSelect', ref:'accom_rooms', parentKey:'hotelId'},
@@ -529,11 +541,15 @@
 
   function uid(){ return 'id'+Math.random().toString(36).slice(2,10); }
   function esc(s){ return (s===undefined||s===null)?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function roomTypeBadge(t){
+    const map = {'رجال':'blue','سيدات':'gold','عائلية':'green'};
+    return t? `<span class="badge ${map[t]||'gray'}">${esc(t)}</span>` : `<span class="badge gray">غير محدد</span>`;
+  }
   function linkLabel(ref, r){
     if(!r) return '';
     if(ref==='trips') return (r.label? r.label+' — ':'') + (r.date||'بدون تاريخ');
     if(ref==='accom_hotels') return r.name + (r.location? ' — '+r.location : '');
-    if(ref==='accom_rooms') return 'غرفة ' + (r.roomNumber||'');
+    if(ref==='accom_rooms') return 'غرفة ' + (r.roomNumber||'') + (r.roomType? ' — '+r.roomType:'');
     return r.name || r.title || r.id;
   }
 
@@ -644,8 +660,10 @@
     if(subs.some(s=>String(s.leadId||'')===String(lead.id))) return;
     const sub={
       id:uid(), leadId:lead.id, customerName:lead.name||'', nationalId:lead.nationalId||'', phone:lead.phone||'',
+      gender:'', governorate:'', groupName:'',
       responsiblePerson:lead.responsiblePerson||'', subscriptionDate:new Date().toISOString().slice(0,10),
-      packageType:'', subscriptionStatus:'نشط', notes:lead.notes||''
+      packageType:'', installmentMonths:'', installmentAmount:'', downPayment:'',
+      subscriptionStatus:'نشط', notes:lead.notes||''
     };
     await apiAdd('subscriptions',sub);
   }
@@ -1435,6 +1453,12 @@
        tripId داخل الفندق) بييتحول تلقائيًا لرابط trip_hotels، وأي نزيل قديم
        من غير tripId بياخد tripId الرحلة القديمة دي، من غير ما نحذف أو نلمس
        أي بيانات فعلية.
+
+     - غرف "التسكين" (accom_rooms) بقى ليها: نوع الغرفة (رجال/سيدات/عائلية)،
+       وتاريخ إتاحة من/إلى، وشاشة "التسكين" بتعرض اسم كل عميل مسجّل على الغرفة
+       (عبر accom_guests) مباشرة، بغض النظر عن الرحلة، لأن الرحلة بقت منفصلة
+       عن الفندق. عدد الحجوزات مقارنة بعدد السراير (capacity) بيتحسب من إجمالي
+       النزلاء المسجلين على الغرفة في كل الجداول.
      ================================================================ */
 
   let accomMigrationChecked = false;
@@ -1575,18 +1599,32 @@
       </div>
       ${crumbsBar([{label:'الفنادق'},{label:hotel.name}])}
       <div class="card">
-        ${rooms.length? `<div class="areas-grid">${rooms.map(r=>{
-          const roomGuests = guests.filter(g=>g.roomId===r.id);
-          const tripsUsing = [...new Set(roomGuests.map(g=>g.tripId).filter(Boolean))]
-            .map(tid=>trips.find(t=>t.id===tid)).filter(Boolean);
-          return `<div class="area-chip" data-room="${r.id}">
-            <div class="cnt">🛏️ ${esc(r.roomNumber||'')}</div>
-            <div class="nm">السعة: ${esc(r.capacity||'—')} فرد</div>
-            <div class="nm" style="color:var(--muted);font-size:11px;">${tripsUsing.length? 'مستخدمة في '+tripsUsing.length+' رحلة':'غير مستخدمة حاليًا'}</div>
-            <button class="icon-btn" data-editroomstd="${r.id}" style="margin-top:6px;">✏️ تعديل</button>
-            <button class="icon-btn del" data-delroomstd="${r.id}" style="margin-top:6px;">🗑️ حذف</button>
-          </div>`;
-        }).join('')}</div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد غرف مضافة لهذا الفندق</div>`}
+        ${rooms.length? `<div class="table-wrap"><table>
+          <thead><tr><th>الغرفة</th><th>النوع</th><th>الإتاحة من</th><th>الإتاحة إلى</th><th>الحجوزات / السراير</th><th>أسماء العملاء المسجلين</th><th></th></tr></thead>
+          <tbody>${rooms.map(r=>{
+            const roomGuests = guests.filter(g=>g.roomId===r.id);
+            const cap = num_(r.capacity)||1;
+            const cnt = roomGuests.length;
+            const over = cnt>cap;
+            const namesHtml = roomGuests.length? roomGuests.map(g=>{
+              const t = trips.find(tr=>tr.id===g.tripId);
+              const tripLbl = t? ' — '+esc(t.label||t.date||'') : '';
+              return esc(g.name||'بدون اسم') + tripLbl;
+            }).join('، ') : '<span style="color:var(--muted)">لا يوجد</span>';
+            return `<tr>
+              <td>🛏️ ${esc(r.roomNumber||'')}</td>
+              <td>${roomTypeBadge(r.roomType)}</td>
+              <td>${esc(r.availableFrom||'—')}</td>
+              <td>${esc(r.availableTo||'—')}</td>
+              <td><span class="badge ${over?'red':'green'}">${cnt} / ${cap}</span></td>
+              <td>${namesHtml}</td>
+              <td style="white-space:nowrap;">
+                <button class="icon-btn" data-editroomstd="${r.id}">✏️</button>
+                <button class="icon-btn del" data-delroomstd="${r.id}">🗑️</button>
+              </td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد غرف مضافة لهذا الفندق</div>`}
       </div>`;
     document.getElementById('add-room-std-btn').addEventListener('click', ()=>openStandaloneRoomForm(hotel.id, null, ()=>render()));
     bindCrumbs(page, [ ()=>{ state.accomSecView='hotels'; render(); }, ()=>{} ]);
@@ -1608,7 +1646,15 @@
       modalBg.innerHTML = `<div class="modal"><h3>${id?'تعديل غرفة':'إضافة غرفة'}</h3>
         <form id="room-standalone-form"><div class="form-grid">
           <div class="field"><label>رقم / اسم الغرفة</label><input name="roomNumber" required value="${esc(row?.roomNumber||'')}"/></div>
-          <div class="field"><label>عدد الأفراد (السعة)</label><input name="capacity" type="number" min="1" value="${esc(row?.capacity||2)}" required/></div>
+          <div class="field"><label>عدد الأفراد (السعة / السراير)</label><input name="capacity" type="number" min="1" value="${esc(row?.capacity||2)}" required/></div>
+          <div class="field"><label>نوع الغرفة</label>
+            <select name="roomType">
+              <option value="">اختر...</option>
+              ${ROOM_TYPES.map(t=>`<option value="${esc(t)}" ${row?.roomType===t?'selected':''}>${esc(t)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field"><label>تاريخ الإتاحة من</label><input name="availableFrom" type="date" value="${esc(row?.availableFrom||'')}"/></div>
+          <div class="field"><label>تاريخ الإتاحة إلى</label><input name="availableTo" type="date" value="${esc(row?.availableTo||'')}"/></div>
         </div>
         <div class="modal-actions"><button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
           <button type="submit" class="btn-primary btn-gold">حفظ</button></div></form></div>`;
@@ -1620,7 +1666,8 @@
         const guard = submitGuard(e.target); if(!guard.ok) return;
         try{
           const fd = new FormData(e.target);
-          const rec = {id: id||uid(), hotelId, roomNumber:fd.get('roomNumber'), capacity:fd.get('capacity')};
+          const rec = {id: id||uid(), hotelId, roomNumber:fd.get('roomNumber'), capacity:fd.get('capacity'),
+            roomType:fd.get('roomType'), availableFrom:fd.get('availableFrom'), availableTo:fd.get('availableTo')};
           if(id) await apiUpdate('accom_rooms', rec); else await apiAdd('accom_rooms', rec);
           modalBg.remove(); afterSave && afterSave();
         }catch(err){ console.error(err); alert('تعذر الحفظ'); guard.release(); }
@@ -1825,6 +1872,7 @@
           const pct = Math.min(100, Math.round(cnt/cap*100));
           return `<div class="area-chip click-card" data-room="${r.id}">
             <div class="cnt">🛏️ ${esc(r.roomNumber||'')}</div>
+            <div class="nm">${roomTypeBadge(r.roomType)}</div>
             <div class="nm">${cnt} / ${cap} فرد (لهذه الرحلة)</div>
             <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${cnt>cap?'var(--danger)':'var(--navy-600)'};"></div></div>
           </div>`;
