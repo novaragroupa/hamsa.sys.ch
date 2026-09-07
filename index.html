@@ -348,7 +348,7 @@
         {key:'notes', label:'ملاحظات', type:'textarea'},
       ]},
 
-    subscriptions:{ title:'الاشتراكات', icon:'💳', roles:['admin','pr_manager','pr_leader','pr_member'],
+    subscriptions:{ title:'الاشتراكات', icon:'💳', roles:['admin','pr_manager','pr_leader','pr_member','accommodation','accounting'],
       fields:[
         {key:'leadId', label:'كود العميل', type:'readonly'},
         {key:'customerName', label:'اسم العميل', type:'text', required:true},
@@ -373,7 +373,7 @@
         {key:'notes', label:'ملاحظات', type:'textarea'},
       ]},
 
-    winners:{ title:'الفائزون', icon:'🏆', roles:['admin','pr_manager','pr_leader','pr_member'], fields:[]},
+    winners:{ title:'الفائزون', icon:'🏆', roles:['admin','pr_manager','pr_leader','pr_member','accommodation','accounting'], fields:[]},
   };
 
   const LEDGER_FIELDS = [
@@ -671,6 +671,10 @@
     return data;
   }
   function prCanEditRow(key,row){
+    // عرض فقط: التسكين والحسابات بقى يقدروا يشوفوا الاشتراكات/الفائزين، بس
+    // مايقدروش يضيفوا أو يعدلوا أو يحذفوا فيهم — باقي صلاحياتهم (زي التسكين
+    // والرحلات) متغيرتش خالص.
+    if(['accommodation','accounting'].includes(state.user.role) && key==='subscriptions') return false;
     if(!isPRUser()) return true;
     if(state.user.role==='pr_manager') return true;
     const myName = currentEmployee()?.name || state.user.name;
@@ -2029,6 +2033,9 @@
     const tripMap=Object.fromEntries(trips.map(r=>[r.id,linkLabel('trips',r)]));
     const hotelMap=Object.fromEntries(hotels.map(r=>[r.id,linkLabel('accom_hotels',r)]));
     const roomMap=Object.fromEntries(rooms.map(r=>[r.id,linkLabel('accom_rooms',r)]));
+    // عرض فقط: التسكين والحسابات يشوفوا الفائزين، بس مايقدروش يغيّروا رحلة
+    // الفائز ولا يفتحوا فورم التعديل من هنا (نفس منطق prCanEditRow بالظبط).
+    const canEditWinners = prCanEditRow('subscriptions', null);
     state.moduleSearch=state.moduleSearch||{};
     const searchTerm=state.moduleSearch.winners||'';
     // بنحسب نص البحث لكل صف مرة واحدة بس (مش مع كل حرف يتكتب)، عشان تفادي
@@ -2043,12 +2050,15 @@
       : `<div class="table-wrap"><table><thead><tr><th>العميل</th><th>نوع الاشتراك</th><th>الهاتف</th><th>الرقم القومي</th><th>الجنس</th><th>المحافظة</th><th>حالة القرعة</th><th>الرحلة</th><th>الفندق</th><th>الغرفة</th><th>حالة السفر</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr>
         <td>${esc(r.customerName||'')}</td><td>${esc(r.packageType||'')}</td><td>${esc(r.phone||'')}</td><td>${esc(r.nationalId||'')}</td><td>${esc(r.gender||'')}</td><td>${esc(r.governorate||'')}</td>
         <td><span class="badge gold">فائز</span></td>
-        <td><select class="winner-trip-select" data-id="${esc(r.id)}" style="min-width:180px"><option value="">— بدون رحلة —</option>${trips.map(t=>`<option value="${esc(t.id)}" ${String(t.id)===String(r.tripId||'')?'selected':''}>${esc(linkLabel('trips',t))}</option>`).join('')}</select></td>
+        <td>${canEditWinners
+          ? `<select class="winner-trip-select" data-id="${esc(r.id)}" style="min-width:180px"><option value="">— بدون رحلة —</option>${trips.map(t=>`<option value="${esc(t.id)}" ${String(t.id)===String(r.tripId||'')?'selected':''}>${esc(linkLabel('trips',t))}</option>`).join('')}</select>`
+          : esc(tripMap[r.tripId]||'—')}</td>
         <td>${esc(hotelMap[r.hotelId]||'—')}</td><td>${esc(roomMap[r.roomId]||'—')}</td><td>${esc(r.travelStatus||'لسه مسافر')}</td>
-        <td><button class="icon-btn" data-winner-edit="${esc(r.id)}">✏️</button></td>
+        <td>${canEditWinners ? `<button class="icon-btn" data-winner-edit="${esc(r.id)}">✏️</button>` : ''}</td>
       </tr>`).join('')}</tbody></table></div>`;
     page.innerHTML=`<div class="page-head"><h2>🏆 الفائزون</h2></div>
       ${isPRUser()&&state.user.role!=='pr_manager'?`<div class="assumption-note">البيانات المعروضة هنا خاصة بنطاق صلاحيتك.</div>`:''}
+      ${!canEditWinners?`<div class="assumption-note">عرض فقط: ليس لديك صلاحية تعديل بيانات الفائزين.</div>`:''}
       ${data.length?`<div class="card" style="padding:14px 20px;margin-bottom:14px;"><input type="text" id="winners-search-input" placeholder="🔍 ابحث في الفائزون..." value="${esc(searchTerm)}" style="width:100%;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);"/></div>`:''}
       <div class="card"><div id="winners-table-wrap">${tableHtml(getRows(searchTerm))}</div></div>`;
     const bind=container=>{
@@ -2144,6 +2154,9 @@
 
     state.moduleSearch = state.moduleSearch || {};
     const searchTerm = state.moduleSearch[key] || '';
+    // بنحدد الحالة دي بدقة عشان أي دور تاني (PR، أدمن، إلخ) يفضل شغال بالظبط
+    // زي ما كان قبل كده من غير أي تغيير في زرار الإضافة بتاعه على أي موديول.
+    const canWriteModule = !(['accommodation','accounting'].includes(state.user.role) && key==='subscriptions');
 
     const bindTableEvents = (container, visibleData)=>{
       container.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click', ()=>{
@@ -2169,23 +2182,26 @@
       if(!visibleData.length) return `<div class="empty-state"><div class="big">🔍</div>لا توجد نتائج مطابقة للبحث</div>`;
       return `<div class="table-wrap"><table>
           <thead><tr>${mod.fields.map(f=>`<th>${esc(f.label)}</th>`).join('')}<th></th></tr></thead>
-          <tbody>${visibleData.map(row=>renderRow(mod,row,linkMaps)).join('')}</tbody>
+          <tbody>${visibleData.map(row=>renderRow(mod,row,linkMaps,canWriteModule)).join('')}</tbody>
         </table></div>`;
     };
 
     page.innerHTML = `
       <div class="page-head">
         <h2>${mod.icon} ${esc(mod.title)}</h2>
-        <button class="btn-primary btn-gold" id="add-btn" style="width:auto;padding:10px 20px;">+ إضافة</button>
+        ${canWriteModule ? `<button class="btn-primary btn-gold" id="add-btn" style="width:auto;padding:10px 20px;">+ إضافة</button>` : ''}
       </div>
       ${isPRUser() && state.user.role!=='pr_manager' ? `<div class="assumption-note">البيانات المعروضة هنا خاصة بنطاق صلاحيتك. لا يتم عرض بيانات أعضاء العلاقات العامة الآخرين.</div>`:''}
+      ${!canWriteModule ? `<div class="assumption-note">عرض فقط: ليس لديك صلاحية إضافة أو تعديل أو حذف بيانات هنا.</div>`:''}
       ${data.length? `<div class="card" style="padding:14px 20px;margin-bottom:14px;">
         <input type="text" id="module-search-input" placeholder="🔍 ابحث في ${esc(mod.title)}..." value="${esc(searchTerm)}"
           style="width:100%;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);"/>
       </div>` : ''}
       <div class="card"><div id="module-table-wrap">${tableSectionHtml(filterModuleRows(mod, data, linkMaps, searchTerm))}</div></div>`;
 
-    document.getElementById('add-btn').addEventListener('click', ()=> key==='employees' ? openEmployeeAccountForm() : openForm(key, null));
+    if(canWriteModule){
+      document.getElementById('add-btn').addEventListener('click', ()=> key==='employees' ? openEmployeeAccountForm() : openForm(key, null));
+    }
 
     // بنحسب نص البحث لكل صف مرة واحدة بس هنا عند فتح الصفحة (مش مع كل حرف يتكتب)،
     // فالفلترة أثناء الكتابة بقت مجرد .includes() سريع على نص جاهز بدل إعادة
@@ -2277,11 +2293,12 @@
     return esc(val);
   }
 
-  function renderRow(mod, row, linkMaps){
+  function renderRow(mod, row, linkMaps, canWrite){
+    if(canWrite===undefined) canWrite=true; // القيمة الافتراضية بتحافظ على السلوك القديم لأي نداء تاني للدالة دي
     return `<tr>${mod.fields.map(f=>`<td>${fieldDisplay(f,row[f.key],linkMaps,row)}</td>`).join('')}
       <td style="white-space:nowrap;">
-        <button class="icon-btn" data-edit="${row.id}">✏️</button>
-        <button class="icon-btn del" data-del="${row.id}">🗑️</button>
+        ${canWrite ? `<button class="icon-btn" data-edit="${row.id}">✏️</button>
+        <button class="icon-btn del" data-del="${row.id}">🗑️</button>` : ''}
       </td></tr>`;
   }
 
