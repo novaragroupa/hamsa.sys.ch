@@ -5,171 +5,381 @@
  * Execute as: Me
  * Who has access: Anyone with the link
  *
+ * الأمان: الـ session secret محفوظ في Script Properties وليس داخل الكود.
+ *
  * مهم: هذا الإصدار لا يعتمد على SECRET موجود داخل index.html.
  * تسجيل الدخول يتم من خلال login، وبعدها يتم إصدار Session Token موقّع من Apps Script.
  *
  * ملاحظة عن التعديلات الجديدة (الرحلات/التسكين المنفصلين):
  * لم يتم تغيير أي شيء في منطق هذا الملف من أجل ميزة فصل "الرحلات" عن "التسكين"،
- * لأن التخزين هنا عام (generic key-value sheets) ويدعم أي اسم جدول تلقائيًا —
- * بما فيه الجدول الجديد "trip_hotels" الذي يربط الرحلة بالفندق. كل عمليات
- * upsert/delete/batchUpsert/batchDelete تعمل معه بدون أي تعديل إضافي.
+ * التخزين هنا عام (generic key-value sheets)، لكن واجهة الويب لا تسمح إلا بالجداول
+ * الموجودة في whitelist داخل TABLE_READ_ROLES / TABLE_WRITE_ROLES. الجدول
+ * "trip_hotels" مدعوم ضمن القائمة بدون فتح إمكانية إنشاء جداول عشوائية.
  */
-const SECRET = 'HMS-9f2Lp7QvXeR4tWyZ1cA6bN0mF3sJ8dK';
-const SESSION_SECRET = 'HMS-SESSION-CHANGE-THIS-TO-A-LONG-RANDOM-SECRET-2026';
-const SESSION_TTL_SECONDS = 60 * 60 * 12;
-
 function doGet(e) {
-  try {
-    const p = e && e.parameter || {};
-    if (p.action === 'login') {
-      return json(handleLogin(String(p.username || ''), String(p.password || '')));
-    }
-
-    const session = verifySession(String(p.session || ''));
-    if (!session) return json({ok:false, error:'Unauthorized'});
-
-    if (p.action === 'me') return json({ok:true, user:publicSessionUser(session)});
-
-    if (p.action === 'list' && p.table) {
-      const table = safeSheetName(p.table);
-      const rows = getCachedRows(table);
-      return json({ok:true, rows:filterRowsForSession(rows, table, session)});
-    }
-
-    // action=bulk&tables=teams,employees,indoor_leads,...
-    // بيرجع كل الجداول المطلوبة في نداء واحد بس، عشان نقلل عدد الطلبات لسيرفر Apps Script
-    // (كل نداء منفصل بياخد وقت بدء تشغيل خاص بيه، فتجميعهم في نداء واحد بيسرّع الواجهة كتير).
-    if (p.action === 'bulk' && p.tables) {
-      const tables = String(p.tables).split(',')
-        .map(function(t){ return safeSheetName(String(t).trim()); })
-        .filter(Boolean);
-      const out = {};
-      tables.forEach(function(t){
-        out[t] = filterRowsForSession(getCachedRows(t), t, session);
-      });
-      return json({ok:true, tables:out});
-    }
-
-    return json({ok:true, service:'homsa-google-sheets-sync', user:publicSessionUser(session)});
-  } catch (err) {
-    return json({ok:false, error:String(err)});
-  }
+  return json({
+    ok:true,
+    service:'homsa-google-sheets-sync',
+    message:'Use POST for authentication and data operations.'
+  });
 }
 
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData && e.postData.contents || '{}');
+    const action = String(body.action || '');
 
-    if (body.action === 'login') {
+    if (action === 'login') {
       return json(handleLogin(String(body.username || ''), String(body.password || '')));
     }
 
     const session = verifySession(String(body.session || ''));
     if (!session) return json({ok:false, error:'Unauthorized'});
 
-    if (!body.table || !body.action) return json({ok:false, error:'Missing action/table'}, 400);
+    if (action === 'me') {
+      return json({ok:true, user:publicSessionUser(session)});
+    }
+
+    if (action === 'list') {
+      const table = safeSheetName(body.table);
+      if (!isAllowedTable(table) || !isTableReadAllowed(session, table)) {
+        return json({ok:false, error:'Forbidden'});
+      }
+      const filtered = filterRowsForSession(getCachedRows(table), table, session);
+      return json({ok:true, rows:sanitizeRowsForClient(table, filtered, session)});
+    }
+
+    if (action === 'bulk') {
+      const requested = Array.isArray(body.tables) ? body.tables : String(body.tables || '').split(',');
+      const tables = [];
+      requested.map(function(t){ return safeSheetName(t); }).filter(Boolean).forEach(function(t){
+        if (tables.indexOf(t) < 0) tables.push(t);
+      });
+      if (tables.length > 50) return json({ok:false, error:'Too many tables'}, 400);
+
+      const out = {};
+      for (let i=0;i<tables.length;i++) {
+        const t = tables[i];
+        if (!isAllowedTable(t) || !isTableReadAllowed(session, t)) {
+          return json({ok:false, error:'Forbidden'});
+        }
+        const filtered = filterRowsForSession(getCachedRows(t), t, session);
+        out[t] = sanitizeRowsForClient(t, filtered, session);
+      }
+      return json({ok:true, tables:out});
+    }
+
+    if (action === 'logout') {
+      return json(handleLogout(session));
+    }
+
+    if (action === 'changePassword') {
+      return json(handleChangePassword(session, body.payload || {}));
+    }
+
+    if (action === 'createEmployeeAccount') {
+      return json(handleCreateEmployeeAccount(session, body.payload || {}));
+    }
+
+    if (!body.table || !action) return json({ok:false, error:'Missing action/table'}, 400);
 
     const table = safeSheetName(body.table);
-    if (!canMutateTable(session, table, body.payload || {})) {
+    if (!isAllowedTable(table)) return json({ok:false, error:'Forbidden'}, 403);
+
+    const payload = body.payload || {};
+    if (!canMutateTable(session, table, payload, action)) {
       return json({ok:false, error:'Forbidden'}, 403);
+    }
+
+    if (action === 'batchDelete') {
+      const ids = Array.isArray(payload.ids) ? payload.ids.filter(Boolean) : [];
+      if (ids.length > MAX_BATCH_DELETE_IDS) return json({ok:false, error:'Too many rows'}, 400);
+    }
+
+    if (action === 'batchUpsert') {
+      const rows = Array.isArray(payload.rows) ? payload.rows : [];
+      if (rows.length > MAX_BATCH_ROWS) return json({ok:false, error:'Too many rows'}, 400);
     }
 
     const ss = SpreadsheetApp.getActive();
     const sheet = getOrCreateSheet(ss, table);
 
-    if (body.action === 'delete') {
-      deleteRowById(sheet, String(body.payload && body.payload.id || ''));
+    if (action === 'delete') {
+      const id = String(payload.id || '');
+      const existing = getRowById(sheet, id);
+      if (!rowBelongsToSession(session, table, existing)) return json({ok:false, error:'Forbidden'}, 403);
+      deleteRowById(sheet, id);
       invalidateCachedRows(table);
-    } else if (body.action === 'upsert') {
-      const payload = enforceOwnership(session, table, body.payload || {});
-      upsertRow(sheet, payload);
+
+    } else if (action === 'upsert') {
+      const existing = getRowById(sheet, String(payload.id || ''));
+      if (existing && !rowBelongsToSession(session, table, existing)) return json({ok:false, error:'Forbidden'}, 403);
+      const cleanPayload = enforceOwnership(session, table, payload);
+      upsertRow(sheet, cleanPayload);
       invalidateCachedRows(table);
-    } else if (body.action === 'batchDelete') {
-      // بيمسح مجموعة صفوف بنداء واحد بدل ما الواجهة تبعت نداء منفصل لكل صف (أسرع بكتير في عمليات الحذف المتتالية زي حذف رحلة بكل فنادقها وغرفها ونزلائها)
-      const ids = (body.payload && body.payload.ids) || [];
+
+    } else if (action === 'batchDelete') {
+      const ids = (payload.ids || []).map(String).filter(Boolean);
+      const existingRows = readRows(sheet);
+      for (let i=0;i<ids.length;i++) {
+        const existing = existingRows.find(function(r){ return String(r.id || '') === ids[i]; });
+        if (existing && !rowBelongsToSession(session, table, existing)) {
+          return json({ok:false, error:'Forbidden'}, 403);
+        }
+      }
       deleteRowsBatch(sheet, ids);
       invalidateCachedRows(table);
-    } else if (body.action === 'batchUpsert') {
-      // بيحفظ مجموعة صفوف بنداء واحد بدل نداء منفصل لكل صف
-      const rows = (body.payload && body.payload.rows) || [];
-      const cleanRows = rows.map(function(r){ return enforceOwnership(session, table, r || {}); });
+
+    } else if (action === 'batchUpsert') {
+      const rows = payload.rows || [];
+      const existingRows = readRows(sheet);
+      const cleanRows = rows.map(function(r) {
+        const existing = existingRows.find(function(x){ return String(x.id || '') === String((r || {}).id || ''); });
+        if (existing && !rowBelongsToSession(session, table, existing)) throw new Error('Forbidden');
+        return enforceOwnership(session, table, r || {});
+      });
       upsertRowsBatch(sheet, cleanRows);
       invalidateCachedRows(table);
+
     } else {
       return json({ok:false, error:'Unknown action'}, 400);
     }
 
     return json({ok:true});
   } catch (err) {
-    return json({ok:false, error:String(err)}, 500);
+    return json({ok:false, error:String(err)});
   }
 }
 
-/* ---------------- Authentication ---------------- */
+/* ---------------- Authentication & Security ---------------- */
+
+/*
+ * Security notes:
+ * - No credentials or session secret are hard-coded in the client.
+ * - Session secret is stored in Script Properties and generated automatically once.
+ * - Sessions are short-lived and include a per-user sessionVersion.
+ * - Every authenticated request re-validates the user on the server.
+ * - Passwords use per-user salt + repeated SHA-256 for backward-compatible migration.
+ * - The users table is never returned with password hashes.
+ */
+
+const SESSION_TTL_SECONDS = 60 * 60 * 4;
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_LOCK_SECONDS = 10 * 60;
+const PASSWORD_MIN_LENGTH = 12;
+const MAX_BATCH_ROWS = 500;
+const MAX_BATCH_DELETE_IDS = 500;
+
+const ALL_TABLES = [
+  'users','teams','employees','companies','visits','indoor_leads','indoor_data',
+  'callcenter_feedback','callcenter_payments','accommodation','pr_member_data',
+  'subscriptions','trips','trip_hotels','accom_hotels','accom_rooms','accom_guests',
+  'dashboards','widgets','accounting','app_settings'
+];
+
+const TABLE_READ_ROLES = {
+  users: ['admin','hr'],
+  teams: ['admin','hr','pr_manager','pr_leader','pr_member','pr_in','pr_out'],
+  employees: ['admin','hr','pr_manager','pr_leader','pr_member','pr_in','pr_out','callcenter','accommodation','system','analyst'],
+  companies: ['admin','pr_out','pr_in','analyst'],
+  visits: ['admin','pr_out','analyst'],
+  indoor_leads: ['admin','pr_manager','pr_leader','pr_member','pr_in','analyst'],
+  indoor_data: ['admin','pr_manager','pr_leader','pr_member','pr_in','analyst'],
+  callcenter_feedback: ['admin','callcenter','analyst'],
+  callcenter_payments: ['admin','callcenter','analyst'],
+  accommodation: ['admin','accommodation','system','analyst'],
+  pr_member_data: ['admin','pr_manager','pr_leader','pr_member','analyst'],
+  subscriptions: ['admin','pr_manager','pr_leader','pr_member','analyst'],
+  trips: ['admin','accommodation','system','pr_manager','pr_leader','pr_member','analyst'],
+  trip_hotels: ['admin','accommodation','system'],
+  accom_hotels: ['admin','accommodation','system','pr_manager','pr_leader','pr_member','analyst'],
+  accom_rooms: ['admin','accommodation','system','pr_manager','pr_leader','pr_member','analyst'],
+  accom_guests: ['admin','accommodation','system'],
+  dashboards: ['admin','hr','pr_manager','pr_leader','pr_member','pr_in','pr_out','callcenter','accommodation','system','analyst'],
+  widgets: ['admin','hr','pr_manager','pr_leader','pr_member','pr_in','pr_out','callcenter','accommodation','system','analyst'],
+  accounting: ['admin'],
+  app_settings: ['admin','pr_in','accommodation','system']
+};
+
+const TABLE_WRITE_ROLES = {
+  teams: ['admin','hr','pr_manager'],
+  employees: ['admin','hr','pr_manager'],
+  companies: ['admin','pr_out'],
+  visits: ['admin','pr_out','analyst'],
+  indoor_leads: ['admin','pr_manager','pr_leader','pr_member','pr_in'],
+  indoor_data: ['admin','pr_manager','pr_leader','pr_member','pr_in'],
+  callcenter_feedback: ['admin','callcenter'],
+  callcenter_payments: ['admin','callcenter'],
+  accommodation: ['admin','accommodation','system'],
+  pr_member_data: ['admin','pr_manager','pr_leader','pr_member'],
+  subscriptions: ['admin','pr_manager','pr_leader','pr_member'],
+  trips: ['admin','accommodation','system'],
+  trip_hotels: ['admin','accommodation','system'],
+  accom_hotels: ['admin','accommodation','system'],
+  accom_rooms: ['admin','accommodation','system'],
+  accom_guests: ['admin','accommodation','system'],
+  dashboards: ['admin','hr','pr_manager','pr_leader','pr_member','pr_in','pr_out','callcenter','accommodation','system','analyst'],
+  widgets: ['admin','hr','pr_manager','pr_leader','pr_member','pr_in','pr_out','callcenter','accommodation','system','analyst'],
+  accounting: ['admin'],
+  app_settings: ['admin','pr_in','accommodation','system']
+};
+
+const ANALYTICS_ROLES = ['admin','hr','pr_manager','pr_leader','pr_member','pr_in','pr_out','callcenter','accommodation','system','analyst'];
+
+function getSessionSecret() {
+  const props = PropertiesService.getScriptProperties();
+  let secret = props.getProperty('HOMSA_SESSION_SECRET');
+  if (!secret) {
+    secret = Utilities.getUuid() + Utilities.getUuid() + Utilities.getUuid();
+    props.setProperty('HOMSA_SESSION_SECRET', secret);
+  }
+  return secret;
+}
+
+function normalizeUsername(username) {
+  return String(username || '').trim().toLowerCase();
+}
+
+function isAllowedTable(table) {
+  return ALL_TABLES.indexOf(table) >= 0;
+}
+
+function roleAllows(map, session, table) {
+  const allowed = map[table];
+  return !!allowed && allowed.indexOf(String(session.role || '')) >= 0;
+}
+
+function isTableReadAllowed(session, table) {
+  return roleAllows(TABLE_READ_ROLES, session, table);
+}
+
+function isTableWriteAllowed(session, table) {
+  return String(session.role || '') === 'admin' || roleAllows(TABLE_WRITE_ROLES, session, table);
+}
+
+function loginRateKey(username) {
+  return 'loginfail:' + normalizeUsername(username).slice(0, 80);
+}
+
+function checkLoginRateLimit(username) {
+  const cache = CacheService.getScriptCache();
+  const count = Number(cache.get(loginRateKey(username)) || 0);
+  if (count >= LOGIN_MAX_FAILURES) {
+    throw new Error('محاولات دخول كثيرة. حاول مرة أخرى بعد 10 دقائق.');
+  }
+}
+
+function recordLoginFailure(username) {
+  const cache = CacheService.getScriptCache();
+  const key = loginRateKey(username);
+  const count = Number(cache.get(key) || 0) + 1;
+  cache.put(key, String(count), LOGIN_LOCK_SECONDS);
+}
+
+function clearLoginFailures(username) {
+  try { CacheService.getScriptCache().remove(loginRateKey(username)); } catch (_) {}
+}
+
+function randomSalt() {
+  return Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+}
+
+function hashPassword(password, salt) {
+  let value = String(salt || '') + ':' + String(password || '');
+  for (let i = 0; i < 5000; i++) value = sha256(value);
+  return value;
+}
+
+function verifyPassword(user, password) {
+  const salt = String(user.passwordSalt || '');
+  const algo = String(user.passwordAlgo || '');
+  if (salt && algo === 'sha256-iterated-v1') {
+    return hashPassword(password, salt) === String(user.passwordHash || '');
+  }
+  // Backward-compatible check for the old unsalted SHA-256 format.
+  return sha256(password) === String(user.passwordHash || '');
+}
+
+function migratePasswordIfLegacy(user, password) {
+  if (user.passwordSalt && user.passwordAlgo === 'sha256-iterated-v1') return false;
+  user.passwordSalt = randomSalt();
+  user.passwordAlgo = 'sha256-iterated-v1';
+  user.passwordHash = hashPassword(password, user.passwordSalt);
+  user.sessionVersion = Number(user.sessionVersion || 1);
+  return true;
+}
+
+function publicUser(user) {
+  return {
+    uid: String(user.id || ''),
+    username: String(user.username || ''),
+    name: String(user.name || ''),
+    role: String(user.role || ''),
+    team: String(user.team || ''),
+    employeeId: String(user.employeeId || '')
+  };
+}
+
+function currentUserForSession(session) {
+  const rows = getCachedRows('users');
+  return rows.find(function(u) { return String(u.id || '') === String(session.uid || ''); }) || null;
+}
 
 function handleLogin(username, password) {
+  username = normalizeUsername(username);
+  password = String(password || '');
   if (!username || !password) return {ok:false, error:'Missing username/password'};
 
-  const ss = SpreadsheetApp.getActive();
-  const sheet = ss.getSheetByName('users');
+  checkLoginRateLimit(username);
 
-  // أول تشغيل: إنشاء المدير الافتراضي بنفس الـ hash الموجود في النسخة القديمة.
-  if (!sheet || readRows(sheet).length === 0) {
-    const sh = getOrCreateSheet(ss, 'users');
-    const defaultUser = {
-      id:'admin-001',
-      name:'مدير النظام',
-      username:'admin',
-      passwordHash:'240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9',
-      role:'admin',
-      status:'active',
-      team:'',
-      employeeId:''
-    };
-    upsertRow(sh, defaultUser);
-  }
+  const sheet = SpreadsheetApp.getActive().getSheetByName('users');
+  if (!sheet) return {ok:false, error:'لا يوجد جدول users. أنشئ حساب المدير الأول من محرر Apps Script.'};
 
-  const users = readRows(getOrCreateSheet(ss, 'users'));
-  const u = users.find(x => String(x.username || '').toLowerCase() === username.toLowerCase());
-  if (!u || String(u.status || 'active') === 'inactive') return {ok:false, error:'اسم المستخدم أو كلمة المرور غير صحيحة'};
+  const users = readRows(sheet);
+  const user = users.find(function(x) {
+    return normalizeUsername(x.username) === username;
+  });
 
-  if (sha256(password) !== String(u.passwordHash || '')) {
+  if (!user || String(user.status || 'active') === 'inactive') {
+    recordLoginFailure(username);
     return {ok:false, error:'اسم المستخدم أو كلمة المرور غير صحيحة'};
   }
 
-  // لو team غير موجود في users، نحاول قراءته من employees.
-  let team = String(u.team || '');
-  let employeeId = String(u.employeeId || '');
-  if (!team || !employeeId) {
-    const empSheet = ss.getSheetByName('employees');
-    if (empSheet) {
-      const emp = readRows(empSheet).find(x =>
-        (x.username && String(x.username).toLowerCase() === String(u.username).toLowerCase()) ||
-        (employeeId && String(x.id) === employeeId)
-      );
-      if (emp) {
-        team = team || String(emp.team || '');
-        employeeId = employeeId || String(emp.id || '');
-      }
-    }
+  if (!verifyPassword(user, password)) {
+    recordLoginFailure(username);
+    return {ok:false, error:'اسم المستخدم أو كلمة المرور غير صحيحة'};
+  }
+
+  clearLoginFailures(username);
+
+  let changed = false;
+  if (!user.sessionVersion) {
+    user.sessionVersion = 1;
+    changed = true;
+  }
+  if (migratePasswordIfLegacy(user, password)) changed = true;
+  if (changed) {
+    upsertRow(sheet, user);
+    invalidateCachedRows('users');
   }
 
   const payload = {
-    uid:String(u.id),
-    username:String(u.username),
-    name:String(u.name || ''),
-    role:String(u.role || ''),
-    team:team,
-    employeeId:employeeId,
-    exp:Math.floor(Date.now()/1000) + SESSION_TTL_SECONDS
+    uid: String(user.id),
+    username: String(user.username || ''),
+    name: String(user.name || ''),
+    role: String(user.role || ''),
+    team: String(user.team || ''),
+    employeeId: String(user.employeeId || ''),
+    sv: Number(user.sessionVersion || 1),
+    exp: Math.floor(Date.now()/1000) + SESSION_TTL_SECONDS
   };
 
-  return {ok:true, user:payload, session:createSession(payload)};
+  return {ok:true, user:publicSessionUser(payload), session:createSession(payload)};
 }
 
 function createSession(payload) {
   const body = base64url(JSON.stringify(payload));
-  const sig = hmac(body, SESSION_SECRET);
+  const sig = hmac(body, getSessionSecret());
   return body + '.' + sig;
 }
 
@@ -178,13 +388,224 @@ function verifySession(token) {
     const parts = String(token || '').split('.');
     if (parts.length !== 2) return null;
     const body = parts[0], sig = parts[1];
-    if (hmac(body, SESSION_SECRET) !== sig) return null;
+    if (hmac(body, getSessionSecret()) !== sig) return null;
 
     const payload = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(body)).getDataAsString());
-    if (!payload.exp || Number(payload.exp) < Math.floor(Date.now()/1000)) return null;
+    if (!payload.uid || !payload.exp || Number(payload.exp) < Math.floor(Date.now()/1000)) return null;
+
+    const user = currentUserForSession(payload);
+    if (!user || String(user.status || 'active') === 'inactive') return null;
+
+    const currentVersion = Number(user.sessionVersion || 1);
+    if (Number(payload.sv || 1) !== currentVersion) return null;
+
+    // Refresh authorization data from the server so role/team changes are not trusted from the browser.
+    payload.username = String(user.username || '');
+    payload.name = String(user.name || '');
+    payload.role = String(user.role || '');
+    payload.team = String(user.team || '');
+    payload.employeeId = String(user.employeeId || '');
+    payload.sv = currentVersion;
     return payload;
   } catch (_) {
     return null;
+  }
+}
+
+function handleLogout(session) {
+  const ss = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName('users');
+  if (!sheet) return {ok:true};
+
+  const users = readRows(sheet);
+  const user = users.find(function(u){ return String(u.id || '') === String(session.uid || ''); });
+  if (!user) return {ok:true};
+
+  user.sessionVersion = Number(user.sessionVersion || 1) + 1;
+  upsertRow(sheet, user);
+  invalidateCachedRows('users');
+  return {ok:true};
+}
+
+function handleChangePassword(session, payload) {
+  const currentPassword = String(payload.currentPassword || '');
+  const newUsername = normalizeUsername(payload.newUsername || '');
+  const newPassword = String(payload.newPassword || '');
+
+  if (!currentPassword) return {ok:false, error:'كلمة المرور الحالية مطلوبة'};
+  if (!newUsername && !newPassword) return {ok:false, error:'لا يوجد تغيير مطلوب'};
+  if (newUsername && !/^[a-zA-Z0-9._-]{3,40}$/.test(newUsername)) {
+    return {ok:false, error:'اسم المستخدم غير صالح'};
+  }
+  if (newPassword && newPassword.length < PASSWORD_MIN_LENGTH) {
+    return {ok:false, error:'كلمة المرور الجديدة يجب أن تكون 12 حرفًا على الأقل'};
+  }
+
+  const ss = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName('users');
+  if (!sheet) return {ok:false, error:'الحسابات غير متاحة'};
+
+  const users = readRows(sheet);
+  const user = users.find(function(u){ return String(u.id || '') === String(session.uid || ''); });
+  if (!user) return {ok:false, error:'الحساب غير موجود'};
+  if (!verifyPassword(user, currentPassword)) return {ok:false, error:'كلمة المرور الحالية غير صحيحة'};
+
+  if (newUsername) {
+    const taken = users.some(function(u){
+      return String(u.id || '') !== String(user.id || '') &&
+        normalizeUsername(u.username) === newUsername;
+    });
+    if (taken) return {ok:false, error:'اسم المستخدم مستخدم بالفعل'};
+    user.username = newUsername;
+  }
+
+  if (newPassword) {
+    user.passwordSalt = randomSalt();
+    user.passwordAlgo = 'sha256-iterated-v1';
+    user.passwordHash = hashPassword(newPassword, user.passwordSalt);
+  }
+
+  user.sessionVersion = Number(user.sessionVersion || 1) + 1;
+  upsertRow(sheet, user);
+  invalidateCachedRows('users');
+
+  const nextPayload = {
+    uid: String(user.id),
+    username: String(user.username || ''),
+    name: String(user.name || ''),
+    role: String(user.role || ''),
+    team: String(user.team || ''),
+    employeeId: String(user.employeeId || ''),
+    sv: Number(user.sessionVersion),
+    exp: Math.floor(Date.now()/1000) + SESSION_TTL_SECONDS
+  };
+
+  return {
+    ok:true,
+    user:publicSessionUser(nextPayload),
+    session:createSession(nextPayload)
+  };
+}
+
+function setupFirstAdmin(username, password, name) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    username = normalizeUsername(username);
+    password = String(password || '');
+    name = String(name || 'مدير النظام').trim();
+
+    if (!username || !/^[a-zA-Z0-9._-]{3,40}$/.test(username)) {
+      throw new Error('اسم المستخدم غير صالح');
+    }
+    if (password.length < PASSWORD_MIN_LENGTH) {
+      throw new Error('كلمة المرور يجب أن تكون 12 حرفًا على الأقل');
+    }
+
+    const ss = SpreadsheetApp.getActive();
+    const sheet = ss.getSheetByName('users');
+    if (sheet && readRows(sheet).length) throw new Error('يوجد حسابات بالفعل — لا تستخدم setupFirstAdmin');
+
+    const sh = getOrCreateSheet(ss, 'users');
+    const salt = randomSalt();
+    const user = {
+      id:'usr_' + Utilities.getUuid().replace(/-/g,''),
+      name:name,
+      username:username,
+      passwordHash:hashPassword(password, salt),
+      passwordSalt:salt,
+      passwordAlgo:'sha256-iterated-v1',
+      role:'admin',
+      status:'active',
+      team:'',
+      employeeId:'',
+      sessionVersion:1
+    };
+    upsertRow(sh, user);
+    invalidateCachedRows('users');
+    return publicUser(user);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleCreateEmployeeAccount(session, payload) {
+  if (['admin','hr'].indexOf(String(session.role || '')) < 0) {
+    return {ok:false, error:'Forbidden'};
+  }
+
+  payload = payload || {};
+  const name = String(payload.name || '').trim();
+  const username = normalizeUsername(payload.username || '');
+  const password = String(payload.password || '');
+  const role = String(payload.role || '').trim();
+
+  if (!name || !username || !password || !role) return {ok:false, error:'أكمل البيانات المطلوبة'};
+  if (!/^[a-zA-Z0-9._-]{3,40}$/.test(username)) return {ok:false, error:'اسم المستخدم غير صالح'};
+  if (password.length < PASSWORD_MIN_LENGTH) return {ok:false, error:'كلمة المرور يجب أن تكون 12 حرفًا على الأقل'};
+
+  const validRoles = ['admin','hr','pr_manager','pr_leader','pr_member','pr_out','pr_in','reception','accounting','callcenter','accommodation','system','analyst'];
+  if (validRoles.indexOf(role) < 0) return {ok:false, error:'الصلاحية غير صالحة'};
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = SpreadsheetApp.getActive();
+    const userSheet = getOrCreateSheet(ss, 'users');
+    const users = readRows(userSheet);
+
+    if (users.some(function(u){ return normalizeUsername(u.username) === username; })) {
+      return {ok:false, error:'اسم المستخدم مستخدم بالفعل'};
+    }
+
+    const employeeId = 'emp_' + Utilities.getUuid().replace(/-/g,'');
+    const userId = 'usr_' + Utilities.getUuid().replace(/-/g,'');
+    const salt = randomSalt();
+
+    const employeeData = payload.employeeData || {};
+    const user = {
+      id:userId,
+      name:name,
+      username:username,
+      passwordHash:hashPassword(password, salt),
+      passwordSalt:salt,
+      passwordAlgo:'sha256-iterated-v1',
+      role:role,
+      status:'active',
+      team:String(employeeData.team || ''),
+      employeeId:employeeId,
+      sessionVersion:1
+    };
+
+    const employee = {
+      id:employeeId,
+      name:name,
+      username:username,
+      department:String(employeeData.department || ''),
+      status:'active',
+      specialNumber:String(employeeData.specialNumber || ''),
+      companyNumber:String(employeeData.companyNumber || ''),
+      team:String(employeeData.team || ''),
+      phone:String(employeeData.phone || ''),
+      address:String(employeeData.address || ''),
+      hireDate:employeeData.hireDate || '',
+      salary:employeeData.salary === '' || employeeData.salary == null ? '' : Number(employeeData.salary)
+    };
+
+    upsertRow(userSheet, user);
+    try {
+      upsertRow(getOrCreateSheet(ss, 'employees'), employee);
+    } catch (err) {
+      deleteRowById(userSheet, userId);
+      invalidateCachedRows('users');
+      throw err;
+    }
+
+    invalidateCachedRows('users');
+    invalidateCachedRows('employees');
+    return {ok:true, user:publicUser(user), employee:employee};
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -220,23 +641,62 @@ function base64url(text) {
   return Utilities.base64EncodeWebSafe(Utilities.newBlob(String(text)).getBytes()).replace(/=+$/,'');
 }
 
-/* ---------------- PR visibility ---------------- */
+/* ---------------- Server-side visibility / ownership ---------------- */
 
 function isPRRole(role) {
   return ['pr_manager','pr_leader','pr_member'].indexOf(role) >= 0;
 }
 
 function employeeNamesForSession(session) {
-  const ss = SpreadsheetApp.getActive();
-  const sh = ss.getSheetByName('employees');
-  if (!sh) return [];
-  const emps = readRows(sh);
+  // كان بيقرأ شيت employees بالكامل مباشرة (readRows) في كل مرة، من غير كاش، حتى
+  // لو نفس الطلب بيلف على أكتر من جدول (bulk) أو نفس الجلسة بتعمل أكتر من عملية
+  // ورا بعض. الدالة دي بتتنادى من filterRowsForSession/rowBelongsToSession/
+  // enforceOwnership لكل جدول PR-filtered، فكانت بتسبب قراءة كاملة إضافية للشيت
+  // (Sheets API round-trip) لكل جدول في كل bulk request. دلوقتي بتستخدم نفس كاش
+  // getCachedRows('employees') المستخدم في باقي النظام (30 ثانية) بدل قراءة مباشرة.
+  const emps = getCachedRows('employees');
   if (session.role === 'pr_manager') return emps.map(x => String(x.name || '')).filter(Boolean);
-  return emps.filter(x => x.team === session.team && x.status !== 'inactive')
+  return emps.filter(x => String(x.team || '') === String(session.team || '') && x.status !== 'inactive')
     .map(x => String(x.name || '')).filter(Boolean);
 }
 
+function serverAnalyticsModulesForRole(role) {
+  const map = {
+    admin:['teams','employees','indoor_leads','indoor_data','pr_member_data','subscriptions','callcenter_feedback','accommodation','trips_hub'],
+    hr:['teams','employees'],
+    pr_manager:['teams','employees','indoor_leads','indoor_data','pr_member_data','subscriptions','winners'],
+    pr_leader:['employees','indoor_leads','indoor_data','pr_member_data','subscriptions','winners'],
+    pr_member:['employees','indoor_leads','indoor_data','pr_member_data','subscriptions','winners'],
+    pr_out:['employees','companies','visits'],
+    pr_in:['employees','indoor_leads','indoor_data'],
+    callcenter:['callcenter_feedback'],
+    accommodation:['accommodation'],
+    system:['accommodation'],
+    analyst:['teams','employees','indoor_leads','pr_member_data','subscriptions','callcenter_feedback','accommodation']
+  };
+  return map[role] || [];
+}
+
 function filterRowsForSession(rows, table, session) {
+  if (table === 'users') {
+    return rows.filter(function(r){ return String(r.id || '') === String(session.uid || '') || session.role === 'admin' || session.role === 'hr'; });
+  }
+
+  if (table === 'dashboards') {
+    const allowedModules = serverAnalyticsModulesForRole(session.role);
+    if (session.role === 'admin' || session.role === 'analyst') {
+      return rows.filter(function(r){ return allowedModules.indexOf(String(r.sourceModule || '')) >= 0; });
+    }
+    return rows.filter(function(r){ return allowedModules.indexOf(String(r.sourceModule || '')) >= 0; });
+  }
+
+  if (table === 'widgets') {
+    const dashboards = filterRowsForSession(getCachedRows('dashboards'), 'dashboards', session);
+    const ids = {};
+    dashboards.forEach(function(d){ ids[String(d.id || '')] = true; });
+    return rows.filter(function(r){ return ids[String(r.dashboardId || '')]; });
+  }
+
   if (!isPRRole(session.role)) return rows;
 
   if (session.role === 'pr_manager') return rows;
@@ -269,25 +729,156 @@ function filterRowsForSession(rows, table, session) {
   return rows;
 }
 
-function canMutateTable(session, table, payload) {
-  if (table === 'users') {
-    return ['admin','hr'].indexOf(session.role) >= 0 || String(payload.id || '') === String(session.uid || '');
-  }
-  if (!isPRRole(session.role)) return true;
+function sanitizeRowsForClient(table, rows, session) {
+  return rows.map(function(r) {
+    const c = Object.assign({}, r);
 
-  if (session.role === 'pr_manager') {
-    return ['teams','employees','indoor_leads','indoor_data','pr_member_data','subscriptions'].indexOf(table) >= 0;
+    if (table === 'users') {
+      delete c.passwordHash;
+      delete c.passwordSalt;
+      delete c.passwordAlgo;
+      delete c.sessionVersion;
+    }
+
+    if (table === 'employees' && ['admin','hr'].indexOf(String(session.role || '')) < 0) {
+      delete c.salary;
+      delete c.specialNumber;
+      delete c.companyNumber;
+      delete c.address;
+    }
+
+    return c;
+  });
+}
+
+function rowBelongsToSession(session, table, row) {
+  if (!row) return false;
+  if (session.role === 'admin') return true;
+
+  if (['indoor_leads','indoor_data','subscriptions'].indexOf(table) >= 0) {
+    if (session.role === 'pr_manager') return true;
+    const allowed = employeeNamesForSession(session);
+    const owner = String(row.responsiblePerson || '');
+    return session.role === 'pr_leader' ? allowed.indexOf(owner) >= 0 : owner === String(session.name || '');
   }
 
-  if (session.role === 'pr_leader') {
-    return ['indoor_leads','indoor_data','pr_member_data','subscriptions'].indexOf(table) >= 0;
+  if (table === 'pr_member_data') {
+    if (session.role === 'pr_manager') return true;
+    const allowed = employeeNamesForSession(session);
+    const owner = String(row.memberId || '');
+    return session.role === 'pr_leader' ? allowed.indexOf(owner) >= 0 : owner === String(session.name || '');
   }
 
-  return ['indoor_leads','indoor_data','pr_member_data','subscriptions'].indexOf(table) >= 0;
+  if (table === 'employees' && session.role === 'pr_member') {
+    return String(row.id || '') === String(session.employeeId || '');
+  }
+
+  if (table === 'dashboards' || table === 'widgets') {
+    return true;
+  }
+
+  return true;
+}
+
+function canMutateTable(session, table, payload, action) {
+  // Generic users mutations are deliberately disabled. Use the dedicated
+  // createEmployeeAccount / changePassword actions instead.
+  if (table === 'users') return false;
+
+  if (!isTableWriteAllowed(session, table)) return false;
+
+  if (['dashboards','widgets'].indexOf(table) >= 0) {
+    if (!ANALYTICS_ROLES.includes(String(session.role || ''))) return false;
+    if (session.role === 'admin') return true;
+
+    const allowedModules = serverAnalyticsModulesForRole(session.role);
+
+    if (table === 'dashboards') {
+      if (action === 'batchUpsert') {
+        const rows = Array.isArray((payload || {}).rows) ? payload.rows : [];
+        if (!rows.length) return true;
+        // كانت getCachedRows('dashboards') بتتنادى جوه every() يعني لكل صف في الباتش
+        // (لحد 500 صف)، وكل نداء ده معناه قراءة من ScriptCache + JSON.parse لكل
+        // الجدول من الأول — بنجيبها مرة واحدة بره اللوب.
+        const existingDashboards = getCachedRows('dashboards');
+        return rows.every(function(p) {
+          if (!p.sourceModule || allowedModules.indexOf(String(p.sourceModule)) < 0) return false;
+          if (!p.id) return true;
+          const existing = existingDashboards.find(function(d){ return String(d.id) === String(p.id); });
+          return !!existing && String(existing.createdBy || '') === String(session.name || '');
+        });
+      }
+
+      const p = payload || {};
+      if (p.sourceModule && allowedModules.indexOf(String(p.sourceModule)) < 0) return false;
+      if (action === 'delete' || p.id) {
+        const existing = getCachedRows('dashboards').find(function(d){ return String(d.id) === String(p.id); });
+        return !!existing && String(existing.createdBy || '') === String(session.name || '');
+      }
+      return true;
+    }
+
+    if (action === 'batchUpsert') {
+      const rows = Array.isArray((payload || {}).rows) ? payload.rows : [];
+      if (!rows.length) return true;
+      const dashboards = getCachedRows('dashboards');
+      // نفس المشكلة اللي فوق: getCachedRows('widgets') كانت بتتنادى لكل صف جوه
+      // every() بدل ما تتجاب مرة واحدة.
+      const existingWidgets = getCachedRows('widgets');
+      return rows.every(function(p) {
+        const dashboard = dashboards.find(function(d){ return String(d.id) === String(p.dashboardId || ''); });
+        if (!dashboard || String(dashboard.createdBy || '') !== String(session.name || '')) return false;
+        if (!p.id) return true;
+        const existing = existingWidgets.find(function(w){ return String(w.id) === String(p.id); });
+        return !existing || String(existing.dashboardId || '') === String(p.dashboardId || '');
+      });
+    }
+
+    if (action === 'batchDelete') {
+      const ids = Array.isArray((payload || {}).ids) ? payload.ids.map(String) : [];
+      const widgets = getCachedRows('widgets');
+      const dashboards = getCachedRows('dashboards');
+      return ids.every(function(id) {
+        const widget = widgets.find(function(w){ return String(w.id) === id; });
+        if (!widget) return true;
+        const dashboard = dashboards.find(function(d){ return String(d.id) === String(widget.dashboardId || ''); });
+        return !!dashboard && String(dashboard.createdBy || '') === String(session.name || '');
+      });
+    }
+
+    const p = payload || {};
+    let dashboardId = String(p.dashboardId || '');
+    if (action === 'delete' && p.id) {
+      const existingWidget = getCachedRows('widgets').find(function(w){ return String(w.id) === String(p.id); });
+      if (existingWidget) dashboardId = String(existingWidget.dashboardId || '');
+    }
+    const dashboard = getCachedRows('dashboards').find(function(d){ return String(d.id) === dashboardId; });
+    return !!dashboard && String(dashboard.createdBy || '') === String(session.name || '');
+  }
+
+  if (table === 'app_settings' && session.role !== 'admin') {
+    const key = String((payload || {}).key || '');
+    if (session.role === 'pr_in') return key === 'indoor_data_sheet_link';
+    if (['accommodation','system'].indexOf(session.role) >= 0) return key === 'accom_migration_v2_done';
+    return false;
+  }
+
+  if (session.role === 'pr_member' && table === 'employees') {
+    return String(payload && payload.id || '') === String(session.employeeId || '');
+  }
+
+  if (isPRRole(session.role)) {
+    if (['pr_manager','pr_leader','pr_member'].indexOf(session.role) >= 0 &&
+        ['indoor_leads','indoor_data','subscriptions','pr_member_data'].indexOf(table) >= 0) {
+      return true;
+    }
+  }
+
+  return true;
 }
 
 function enforceOwnership(session, table, payload) {
-  const p = Object.assign({}, payload);
+  const p = Object.assign({}, payload || {});
   const allowed = employeeNamesForSession(session);
   const myName = session.name || '';
 
@@ -296,6 +887,10 @@ function enforceOwnership(session, table, payload) {
       p.responsiblePerson = myName;
     }
     if (table === 'pr_member_data') p.memberId = myName;
+    if (table === 'employees') {
+      p.id = String(session.employeeId || '');
+      p.name = myName;
+    }
   }
 
   if (session.role === 'pr_leader') {
@@ -306,6 +901,12 @@ function enforceOwnership(session, table, payload) {
     if (table === 'pr_member_data' &&
         p.memberId && allowed.indexOf(String(p.memberId)) < 0) {
       throw new Error('لا يمكن ربط الداتا بعضو خارج فريقك');
+    }
+  }
+
+  if (['dashboards','widgets'].indexOf(table) >= 0 && session.role !== 'admin') {
+    if (table === 'dashboards') {
+      p.createdBy = myName;
     }
   }
 
@@ -550,7 +1151,7 @@ function upsertRowsBatch(sheet, rows) {
     let row = (id && idIndex[id]) ? idIndex[id] : nextRow++;
     const values = h.map(function(k) {
       const v = obj[k];
-      return v === null || v === undefined ? '' : (typeof v === 'object' ? JSON.stringify(v) : v);
+      return serializeCellValue(v);
     });
     sheet.getRange(row, 1, 1, h.length).setValues([values]);
     if (id) idIndex[id] = row;
@@ -576,31 +1177,35 @@ function deleteRowsBatch(sheet, ids) {
 
 /* ---------------- Sheets CRUD ---------------- */
 
+// اتفصلت من جوه readRows عشان getRowById يقدر يستخدمها على صف واحد بس، من غير
+// ما يحتاج يقرأ الشيت بالكامل.
+function rowValuesToObject(h, row) {
+  const obj = {};
+  h.forEach((key,i) => {
+    let v = row[i];
+    if (v instanceof Date) v = v.toISOString();
+    if (typeof v === 'string') {
+      const t=v.trim();
+      if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
+        try { v=JSON.parse(t); } catch(_) {}
+      }
+    }
+    obj[key]=v;
+  });
+  return obj;
+}
+
 function readRows(sheet) {
   const lastRow = sheet.getLastRow();
   const lastCol = sheet.getLastColumn();
   if (lastRow < 2 || lastCol < 1) return [];
   const h = sheet.getRange(1,1,1,lastCol).getValues()[0].map(String);
   const values = sheet.getRange(2,1,lastRow-1,lastCol).getValues();
-  return values.filter(row => row.some(v => v !== '')).map(row => {
-    const obj = {};
-    h.forEach((key,i) => {
-      let v = row[i];
-      if (v instanceof Date) v = v.toISOString();
-      if (typeof v === 'string') {
-        const t=v.trim();
-        if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
-          try { v=JSON.parse(t); } catch(_) {}
-        }
-      }
-      obj[key]=v;
-    });
-    return obj;
-  });
+  return values.filter(row => row.some(v => v !== '')).map(row => rowValuesToObject(h, row));
 }
 
 function safeSheetName(name) {
-  return String(name).replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 90);
+  return String(name || '').trim();
 }
 
 function getOrCreateSheet(ss, name) {
@@ -620,7 +1225,9 @@ function headers(sheet) {
 
 function ensureHeaders(sheet, keys) {
   let h = headers(sheet);
-  const missing = keys.filter(k => !h.includes(k));
+  const missing = keys
+    .map(String)
+    .filter(function(k){ return /^[A-Za-z][A-Za-z0-9_]{0,59}$/.test(k) && !h.includes(k); });
   if (missing.length) {
     sheet.getRange(1,h.length+1,1,missing.length).setValues([missing]);
     h = h.concat(missing);
@@ -644,9 +1251,41 @@ function upsertRow(sheet, obj) {
   }
   const values = h.map(k => {
     const v=obj[k];
-    return v === null || v === undefined ? '' : (typeof v==='object' ? JSON.stringify(v) : v);
+    return serializeCellValue(v);
   });
   sheet.getRange(row,1,1,h.length).setValues([values]);
+}
+
+function getRowById(sheet, id) {
+  // قبل كده كانت الدالة دي بتقرا عمود الـid لوحده الأول (صح)، وبعدين لو لاقت
+  // الصف، كانت بتنادي readRows(sheet) اللي بيقرا الشيت *بالكامل* (كل الصفوف
+  // وكل الأعمدة) بس عشان تطلع صف واحد منه! ده معناه ضعف عدد القراءات من Sheets
+  // API على كل عملية upsert/delete (اللي هي أكتر عملية بتحصل في النظام)، وكل
+  // ما الجدول يكبر كان بياخد وقت أطول وأطول من غير أي داعي. دلوقتي بنقرا الصف
+  // المطلوب بس (getRange واحدة على صف واحد) بعد ما نلاقي مكانه.
+  if (!id || sheet.getLastRow() < 2) return null;
+  const h = headers(sheet);
+  const idCol = h.indexOf('id') + 1;
+  if (!idCol) return null;
+  const lastRow = sheet.getLastRow();
+  const idValues = sheet.getRange(2, idCol, lastRow - 1, 1).getValues().flat().map(String);
+  const found = idValues.indexOf(String(id));
+  if (found < 0) return null;
+  const rowIndex = found + 2;
+  const lastCol = sheet.getLastColumn();
+  const rowValues = sheet.getRange(rowIndex, 1, 1, lastCol).getValues()[0];
+  return rowValuesToObject(h, rowValues);
+}
+
+function sanitizeCellValue(v) {
+  if (typeof v === 'string' && /^[=+\-@]/.test(v)) return "'" + v;
+  return v;
+}
+
+function serializeCellValue(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return sanitizeCellValue(v);
 }
 
 function deleteRowById(sheet, id) {
