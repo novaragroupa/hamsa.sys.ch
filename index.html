@@ -220,12 +220,6 @@
   /* اللوجو بيتحمّل من ملف صورة اسمه logo.png، موجود في نفس مستوى index.html
      في الريبو (root) — زي ما هو فعليًا على GitHub دلوقتي. */
   /* النظام يعمل بدون Supabase. الحسابات والبيانات تُحفظ في Google Sheets. */
-  async function sha256(text){
-    const data = new TextEncoder().encode(String(text));
-    const hash = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
-  }
-  const DEFAULT_ADMIN = {id:'admin-001', name:'مدير النظام', username:'admin', passwordHash:'240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', role:'admin', status:'active'};
   const ROLE_LABELS = {
     admin:'مدير النظام', hr:'HR',
     pr_manager:'المدير العام للعلاقات العامة',
@@ -394,20 +388,41 @@
 
   /* ---------------- Google Sheets backend ---------------- */
   const GOOGLE_SHEETS_WEBHOOK = 'https://script.google.com/macros/s/AKfycbw7Cnm2cgOiB_6MJ2DJYP8NsLaNDXtbaJKRrLiri4LizkMr7s1Q8-AOzRX8uEg5t_pr/exec';
-  let HOMSA_SESSION = localStorage.getItem('homsa_session_token') || '';
+  let HOMSA_SESSION = sessionStorage.getItem('homsa_session_token') || '';
+
+  async function authRequest(action, payload){
+    if(!GOOGLE_SHEETS_WEBHOOK) throw new Error('رابط Google Sheets غير مضبوط');
+    if(!HOMSA_SESSION) throw new Error('انتهت جلسة الدخول — سجّل الدخول مرة أخرى');
+    const r=await fetch(GOOGLE_SHEETS_WEBHOOK,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action,payload:payload||{},session:HOMSA_SESSION}),
+      cache:'no-store'
+    });
+    const data=await r.json().catch(()=>({ok:false,error:'استجابة غير صالحة من الخادم'}));
+    if(!data.ok){
+      if(data.error==='Unauthorized'){
+        HOMSA_SESSION='';
+        sessionStorage.removeItem('homsa_session_token');
+        sessionStorage.removeItem('homsa_session_user');
+        state.user=null;
+      }
+      throw new Error(data.error||'فشل تنفيذ العملية');
+    }
+    return data;
+  }
 
   async function sheetRequest(action, table, payload){
     if(!GOOGLE_SHEETS_WEBHOOK) throw new Error('رابط Google Sheets غير مضبوط');
     if(!HOMSA_SESSION) throw new Error('انتهت جلسة الدخول — سجّل الدخول مرة أخرى');
     if(action==='list'){
-      const u = new URL(GOOGLE_SHEETS_WEBHOOK);
-      u.searchParams.set('action','list');
-      u.searchParams.set('table',table);
-      u.searchParams.set('session',HOMSA_SESSION);
-      const r=await fetch(u.toString(),{cache:'no-store'});
+      const r=await fetch(GOOGLE_SHEETS_WEBHOOK,{method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({action:'list',table,payload:{},session:HOMSA_SESSION}),
+        cache:'no-store'});
       const data=await r.json();
       if(!data.ok) {
-        if(data.error==='Unauthorized'){ HOMSA_SESSION=''; localStorage.removeItem('homsa_session_token'); }
+        if(data.error==='Unauthorized'){ HOMSA_SESSION=''; sessionStorage.removeItem('homsa_session_token'); sessionStorage.removeItem('homsa_session_user'); state.user=null; }
         throw new Error(data.error||'فشل تحميل البيانات من Google Sheets');
       }
       return data.rows||[];
@@ -424,14 +439,13 @@
   async function sheetRequestBulk(tables){
     if(!GOOGLE_SHEETS_WEBHOOK) throw new Error('رابط Google Sheets غير مضبوط');
     if(!HOMSA_SESSION) throw new Error('انتهت جلسة الدخول — سجّل الدخول مرة أخرى');
-    const u=new URL(GOOGLE_SHEETS_WEBHOOK);
-    u.searchParams.set('action','bulk');
-    u.searchParams.set('tables',tables.join(','));
-    u.searchParams.set('session',HOMSA_SESSION);
-    const r=await fetch(u.toString(),{cache:'no-store'});
+    const r=await fetch(GOOGLE_SHEETS_WEBHOOK,{method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action:'bulk',tables,payload:{},session:HOMSA_SESSION}),
+      cache:'no-store'});
     const data=await r.json();
     if(!data.ok){
-      if(data.error==='Unauthorized'){ HOMSA_SESSION=''; localStorage.removeItem('homsa_session_token'); }
+      if(data.error==='Unauthorized'){ HOMSA_SESSION=''; sessionStorage.removeItem('homsa_session_token'); sessionStorage.removeItem('homsa_session_user'); state.user=null; }
       throw new Error(data.error||'فشل تحميل البيانات من Google Sheets');
     }
     return data.tables||{};
@@ -760,9 +774,9 @@
         const data = await response.json();
         if(!data.ok) throw new Error(data.error||'اسم المستخدم أو كلمة المرور غير صحيحة');
         HOMSA_SESSION=data.session;
-        localStorage.setItem('homsa_session_token',HOMSA_SESSION);
+        sessionStorage.setItem('homsa_session_token',HOMSA_SESSION);
         state.user = data.user; state.loginError=null; state.view='dashboard';
-        localStorage.setItem('homsa_session_user', JSON.stringify(data.user));
+        sessionStorage.setItem('homsa_session_user', JSON.stringify(data.user));
         render();
       }catch(err){
         console.error('Login error', err);
@@ -835,7 +849,14 @@
       </div>`;
 
     root.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click', ()=>{ state.view=b.dataset.view; state.sidebarOpen=false; render(); }));
-    document.getElementById('logout-btn').addEventListener('click', ()=>{ localStorage.removeItem('homsa_session_user'); localStorage.removeItem('homsa_session_token'); HOMSA_SESSION=''; state.user=null; state.view='dashboard'; render(); });
+    document.getElementById('logout-btn').addEventListener('click', async ()=>{
+      const btn=document.getElementById('logout-btn');
+      if(btn) btn.disabled=true;
+      try{ if(HOMSA_SESSION) await authRequest('logout',{}); }catch(e){ console.warn('Logout server-side revoke failed',e); }
+      sessionStorage.removeItem('homsa_session_user');
+      sessionStorage.removeItem('homsa_session_token');
+      HOMSA_SESSION=''; state.user=null; state.view='dashboard'; render();
+    });
     document.getElementById('account-btn').addEventListener('click', openChangeAccountForm);
     document.getElementById('menu-toggle').addEventListener('click', ()=>{
       state.sidebarOpen=!state.sidebarOpen;
@@ -2274,8 +2295,8 @@
       <form id="employee-account-form"><div class="form-grid">
         <div class="field"><label>اسم الموظف *</label><input name="name" required /></div>
         <div class="field"><label>اسم المستخدم *</label><input name="username" required pattern="[a-zA-Z0-9._-]{3,40}" placeholder="مثال: ahmed123" /></div>
-        <div class="field"><label>كلمة المرور *</label><input name="password" type="password" minlength="8" required placeholder="8 أحرف على الأقل" /></div>
-        <div class="field"><label>تأكيد كلمة المرور *</label><input name="password2" type="password" minlength="8" required /></div>
+        <div class="field"><label>كلمة المرور *</label><input name="password" type="password" minlength="12" required placeholder="12 حرفًا على الأقل" /></div>
+        <div class="field"><label>تأكيد كلمة المرور *</label><input name="password2" type="password" minlength="12" required /></div>
         <div class="field"><label>الصلاحية *</label><select name="role" required>
           <option value="">اختر...</option>${Object.entries(ROLE_LABELS).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')}
         </select></div>
@@ -2311,13 +2332,7 @@
             salary:form.salary.value?Number(form.salary.value):null}
         };
         if(!payload.name || !payload.username || !payload.password || !payload.role) throw new Error('أكمل البيانات المطلوبة');
-        const users=await loadList('users');
-        if(users.some(x=>String(x.username||'').toLowerCase()===payload.username)) throw new Error('اسم المستخدم مستخدم بالفعل');
-        const employeeId=uid();
-        const user={id:uid(),name:payload.name,username:payload.username,passwordHash:await sha256(payload.password),role:payload.role,status:'active',
-          team:payload.employeeData.team||'',employeeId};
-        const employee={id:employeeId,name:payload.name,username:payload.username,department:payload.employeeData.department||ROLE_LABELS[payload.role]||'',status:'active',...payload.employeeData};
-        await Promise.all([apiAdd('users',user), apiAdd('employees',employee)]);
+        await authRequest('createEmployeeAccount', payload);
         modalBg.remove(); render();
       }catch(err){
         console.error(err); alert(err.message || 'فشل إنشاء حساب الموظف'); btn.disabled=false; btn.textContent='إنشاء الحساب والموظف';
@@ -2334,7 +2349,7 @@
       <div class="assumption-note">سيبها فاضية لو مش عايز تغيّرها. لازم تدخل كلمة المرور الحالية للتأكيد.</div>
       <form id="change-account-form"><div class="form-grid">
         <div class="field"><label>اسم المستخدم الجديد (اختياري)</label><input name="newUsername" pattern="[a-zA-Z0-9._-]{3,40}" placeholder="سيبها فاضية لو مش هتغيّر" /></div>
-        <div class="field"><label>كلمة المرور الجديدة (اختياري)</label><input name="newPassword" type="password" minlength="8" placeholder="8 أحرف على الأقل" /></div>
+        <div class="field"><label>كلمة المرور الجديدة (اختياري)</label><input name="newPassword" type="password" minlength="12" placeholder="12 حرفًا على الأقل" /></div>
         <div class="field full"><label>كلمة المرور الحالية *</label><input name="currentPassword" type="password" required /></div>
       </div>
       <div class="modal-actions"><button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button><button type="submit" class="btn-primary btn-gold">حفظ</button></div>
@@ -2351,16 +2366,14 @@
       if(!newUsername && !newPassword){ alert('حدد اسم مستخدم جديد أو كلمة مرور جديدة على الأقل'); return; }
       btn.disabled=true; btn.textContent='جارٍ الحفظ...';
       try{
-        const users=await loadList('users');
-        const idx=users.findIndex(x=>x.id===state.user.id);
-        if(idx<0) throw new Error('لم يتم العثور على الحساب');
-        if(users[idx].passwordHash!==await sha256(currentPassword)) throw new Error('كلمة المرور الحالية غير صحيحة');
-        if(newUsername && users.some(x=>x.id!==state.user.id && String(x.username||'').toLowerCase()===newUsername.toLowerCase())) throw new Error('اسم المستخدم مستخدم بالفعل');
-        if(newUsername) users[idx].username=newUsername.toLowerCase();
-        if(newPassword) users[idx].passwordHash=await sha256(newPassword);
-        await apiUpdate('users',users[idx]);
-        state.user=users[idx]; localStorage.setItem('homsa_session_user',JSON.stringify(state.user));
-        alert('تم تحديث بيانات الدخول بنجاح.' + (newUsername? ' اسم المستخدم الجديد: '+users[idx].username : ''));
+        const data=await authRequest('changePassword',{currentPassword,newUsername,newPassword});
+        if(data.user) state.user=data.user;
+        if(data.session){
+          HOMSA_SESSION=data.session;
+          sessionStorage.setItem('homsa_session_token',HOMSA_SESSION);
+        }
+        if(state.user) sessionStorage.setItem('homsa_session_user',JSON.stringify(state.user));
+        alert('تم تحديث بيانات الدخول بنجاح.' + (newUsername? ' اسم المستخدم الجديد: '+data.user.username : ''));
         modalBg.remove(); render();
       }catch(err){
         console.error(err); alert(err.message || 'فشل تحديث بيانات الدخول'); btn.disabled=false; btn.textContent='حفظ';
@@ -2526,8 +2539,8 @@
 
   (function initAuth(){
     try{
-      const saved=localStorage.getItem('homsa_session_user');
-      HOMSA_SESSION=localStorage.getItem('homsa_session_token') || '';
+      const saved=sessionStorage.getItem('homsa_session_user');
+      HOMSA_SESSION=sessionStorage.getItem('homsa_session_token') || '';
       if(saved && HOMSA_SESSION){
         try{ state.user = JSON.parse(saved); }catch(_){ state.user=null; }
       }
@@ -2538,16 +2551,12 @@
     if(state.user && HOMSA_SESSION){
       (async function verifySessionInBackground(){
         try{
-          const u=new URL(GOOGLE_SHEETS_WEBHOOK);
-          u.searchParams.set('action','me');
-          u.searchParams.set('session',HOMSA_SESSION);
-          const r=await fetch(u.toString(),{cache:'no-store'});
-          const data=await r.json();
+          const data=await authRequest('me',{});
           if(data.ok){
             state.user=data.user;
-            localStorage.setItem('homsa_session_user', JSON.stringify(data.user));
+            sessionStorage.setItem('homsa_session_user', JSON.stringify(data.user));
           } else {
-            localStorage.removeItem('homsa_session_user'); localStorage.removeItem('homsa_session_token');
+            sessionStorage.removeItem('homsa_session_user'); sessionStorage.removeItem('homsa_session_token');
             HOMSA_SESSION=''; state.user=null; render();
           }
         }catch(e){ console.error('Session check error', e); }
