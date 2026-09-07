@@ -1,0 +1,2569 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام إدارة همسة للسياحة</title>
+</head>
+<body>
+<div id="app-root"></div>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+
+  :root{
+    --navy-900:#0c1f3d;
+    --navy-800:#14315c;
+    --navy-700:#1b3a6b;
+    --navy-600:#25508f;
+    --gold-500:#f2b705;
+    --gold-600:#c99a03;
+    --sand-50:#faf7f0;
+    --sand-100:#f1ead8;
+    --ink:#14213d;
+    --line:#e3ddce;
+    --muted:#6b7280;
+    --danger:#b3261e;
+    --success:#1a7a4c;
+    --warn:#a5690a;
+  }
+  *{box-sizing:border-box;}
+  #app-root, #app-root *{font-family:'Cairo',sans-serif;}
+  #app-root{direction:rtl;color:var(--ink);background:var(--sand-50);min-height:100vh;}
+  #app-root button{font-family:inherit;cursor:pointer;border:none;}
+  #app-root input, #app-root select, #app-root textarea{font-family:inherit;}
+
+  /* ---------- Login ---------- */
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(circle at 30% 20%, var(--navy-700), var(--navy-900) 65%);
+    padding:24px;}
+  .login-card{background:#fff;border-radius:20px;width:100%;max-width:400px;overflow:hidden;
+    box-shadow:0 30px 60px rgba(12,31,61,.35);position:relative;}
+  .arch-top{height:110px;background:linear-gradient(160deg,var(--navy-700),var(--navy-900));
+    position:relative;display:flex;align-items:center;justify-content:center;}
+  .arch-top::after{content:"";position:absolute;bottom:-1px;left:50%;transform:translateX(-50%);
+    width:120px;height:60px;background:#fff;border-radius:60px 60px 0 0;}
+  .arch-top img{height:56px;position:relative;z-index:2;margin-top:-10px;background:#fff;border-radius:10px;padding:4px 6px;}
+  .login-body{padding:38px 32px 32px;}
+  .login-body h1{font-size:20px;font-weight:800;margin:0 0 4px;color:var(--navy-900);text-align:center;}
+  .login-body p.sub{text-align:center;color:var(--muted);font-size:13px;margin:0 0 26px;}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--navy-800);}
+  .field input, .field select, .field textarea{width:100%;padding:11px 14px;border:1.5px solid var(--line);
+    border-radius:10px;font-size:14px;background:var(--sand-50);transition:.15s;}
+  .field input:focus, .field select:focus, .field textarea:focus{outline:none;border-color:var(--gold-500);
+    background:#fff;}
+  .btn-primary{width:100%;padding:12px;background:var(--navy-800);color:#fff;border-radius:10px;
+    font-weight:700;font-size:15px;transition:.15s;}
+  .btn-primary:hover{background:var(--navy-900);}
+  .btn-gold{background:var(--gold-500);color:var(--navy-900);}
+  .btn-gold:hover{background:var(--gold-600);}
+  .error-box{background:#fdeceb;color:var(--danger);padding:10px 14px;border-radius:8px;font-size:13px;
+    margin-bottom:16px;text-align:center;}
+
+  /* ---------- Shell ---------- */
+  .shell{display:flex;min-height:100vh;}
+  .sidebar{width:250px;background:linear-gradient(180deg,var(--navy-900),var(--navy-800));color:#fff;
+    display:flex;flex-direction:column;flex-shrink:0;}
+  .sidebar-head{padding:22px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,.1);}
+  .sidebar-head img{height:34px;background:#fff;border-radius:8px;padding:3px 5px;}
+  .sidebar-head span{font-weight:800;font-size:15px;}
+  .nav{flex:1;overflow-y:auto;padding:14px 10px;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;color:#dfe6f2;
+    font-size:14px;font-weight:600;margin-bottom:4px;transition:.15s;background:transparent;width:100%;text-align:right;}
+  .nav-item:hover{background:rgba(255,255,255,.08);}
+  .nav-item.active{background:var(--gold-500);color:var(--navy-900);}
+  .sidebar-foot{padding:16px;border-top:1px solid rgba(255,255,255,.1);}
+  .user-chip{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .avatar{width:34px;height:34px;border-radius:50%;background:var(--gold-500);color:var(--navy-900);
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;}
+  .user-chip div .name{font-size:13px;font-weight:700;}
+  .user-chip div .role{font-size:11px;color:#b9c4da;}
+  .logout-btn{width:100%;padding:9px;background:rgba(255,255,255,.08);color:#fff;border-radius:8px;font-size:13px;font-weight:600;}
+  .logout-btn:hover{background:rgba(255,255,255,.16);}
+
+  .main{flex:1;min-width:0;padding:26px 30px;overflow-y:auto;}
+  .page-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:12px;}
+  .page-head h2{font-size:22px;font-weight:800;color:var(--navy-900);margin:0;display:flex;align-items:center;gap:10px;}
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:24px;}
+  .stat-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;position:relative;overflow:hidden;}
+  .stat-card::before{content:"";position:absolute;top:0;right:0;width:5px;height:100%;background:var(--gold-500);}
+  .stat-card .num{font-size:26px;font-weight:800;color:var(--navy-900);}
+  .stat-card .lbl{font-size:12.5px;color:var(--muted);margin-top:4px;}
+
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:20px;}
+  .card h3{margin:0 0 14px;font-size:15px;font-weight:800;color:var(--navy-900);}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  thead th{text-align:right;padding:10px 12px;color:var(--navy-800);font-weight:700;border-bottom:2px solid var(--sand-100);
+    background:var(--sand-50);white-space:nowrap;}
+  tbody td{padding:10px 12px;border-bottom:1px solid var(--sand-100);vertical-align:middle;}
+  tbody tr:hover{background:var(--sand-50);}
+  .table-wrap{overflow-x:auto;}
+  .row-photo{width:32px;height:32px;border-radius:50%;object-fit:cover;background:var(--sand-100);}
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;}
+  .badge.gray{background:#eef0f3;color:#555;}
+  .badge.green{background:#e5f5ec;color:var(--success);}
+  .badge.red{background:#fdeceb;color:var(--danger);}
+  .badge.gold{background:#fff3d1;color:var(--warn);}
+  .badge.blue{background:#e6eefc;color:var(--navy-700);}
+
+  .icon-btn{background:transparent;color:var(--navy-700);font-size:13px;padding:5px 8px;border-radius:6px;}
+  .icon-btn:hover{background:var(--sand-100);}
+  .icon-btn.del{color:var(--danger);}
+
+  .empty-state{text-align:center;padding:40px 20px;color:var(--muted);}
+  .empty-state .big{font-size:34px;margin-bottom:8px;}
+
+  /* modal */
+  .modal-bg{position:fixed;inset:0;background:rgba(12,20,38,.55);display:flex;align-items:center;justify-content:center;
+    z-index:50;padding:20px;}
+  .modal{background:#fff;border-radius:16px;width:100%;max-width:520px;max-height:88vh;overflow-y:auto;padding:26px;}
+  .modal h3{margin:0 0 18px;font-size:17px;font-weight:800;color:var(--navy-900);}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .form-grid .full{grid-column:1/-1;}
+  .modal-actions{display:flex;gap:10px;margin-top:20px;}
+  .btn-secondary{flex:1;padding:11px;background:var(--sand-100);color:var(--navy-800);border-radius:10px;font-weight:700;font-size:14px;}
+  .btn-secondary:hover{background:var(--line);}
+  .modal-actions .btn-primary{flex:1;}
+  .photo-preview{width:64px;height:64px;border-radius:50%;object-fit:cover;background:var(--sand-100);margin-bottom:8px;display:block;}
+
+  .areas-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;}
+  .area-chip{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;}
+  .area-chip .cnt{font-size:20px;font-weight:800;color:var(--navy-800);}
+  .area-chip .nm{font-size:12.5px;color:var(--muted);margin-top:3px;}
+
+  .split-two{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  @media (max-width:900px){.split-two{grid-template-columns:1fr;} .form-grid{grid-template-columns:1fr;}}
+  @media (max-width:760px){.sidebar{position:fixed;right:0;top:0;bottom:0;z-index:40;transform:translateX(100%);transition:.2s;}
+    .sidebar.open{transform:translateX(0);} .main{padding:18px;} .menu-toggle{display:inline-flex !important;}}
+  .menu-toggle{display:none;background:var(--navy-900);color:#fff;padding:8px 10px;border-radius:8px;font-size:16px;}
+  .assumption-note{background:#fff3d1;border:1px solid #f0d98a;color:var(--warn);font-size:12px;padding:10px 14px;
+    border-radius:10px;margin-bottom:18px;}
+
+  /* ---------------- Analytics / لوحات تحليل البيانات ---------------- */
+  .board-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;}
+  .board-tab{padding:9px 16px;border-radius:20px;background:#fff;border:1.5px solid var(--line);color:var(--navy-800);
+    font-size:13px;font-weight:700;}
+  .board-tab.active{background:var(--navy-800);color:#fff;border-color:var(--navy-800);}
+  .analytics-filterbar{display:flex;gap:10px;flex-wrap:wrap;flex:1;}
+  .analytics-filter{padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:13px;background:#fff;
+    color:var(--navy-800);min-width:140px;}
+  .widgets-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;}
+  .widget-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;text-align:right;}
+  .widget-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;}
+  .widget-head h4{margin:0;font-size:14px;font-weight:800;color:var(--navy-900);}
+  .add-widget-card{display:flex;align-items:center;justify-content:center;flex-direction:column;background:var(--sand-100);
+    border:1.5px dashed var(--gold-500);color:var(--gold-600);font-weight:700;font-size:13.5px;min-height:120px;
+    text-align:center;line-height:1.9;}
+  .add-widget-card:hover{background:#fff3d1;}
+  .pie-wrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+  .pie-donut-wrap{position:relative;width:120px;height:120px;flex-shrink:0;}
+  .pie-donut{width:100%;height:100%;border-radius:50%;}
+  .pie-hole{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:56px;height:56px;
+    border-radius:50%;background:#fff;}
+  .pie-legend{flex:1;min-width:140px;}
+  .legend-row{display:flex;align-items:center;gap:8px;font-size:12.5px;margin-bottom:6px;}
+  .legend-row .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+  .legend-row .legend-lbl{flex:1;color:var(--ink);}
+  .legend-row .legend-val{color:var(--muted);font-weight:700;white-space:nowrap;}
+  .bar-wrap{display:flex;flex-direction:column;gap:10px;}
+  .bar-row{display:flex;align-items:center;gap:10px;font-size:12.5px;}
+  .bar-lbl{width:90px;flex-shrink:0;color:var(--navy-800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .bar-track{flex:1;height:16px;background:var(--sand-100);border-radius:8px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:8px;}
+  .bar-val{width:34px;text-align:left;font-weight:700;color:var(--navy-900);}
+  .stat-number{font-size:44px;font-weight:800;color:var(--navy-900);text-align:center;padding:20px 0;}
+  .empty-mini{color:var(--muted);font-size:12.5px;text-align:center;padding:20px 0;}
+
+  /* ---------------- الإسكان (Trips -> Hotels -> Rooms -> Guests) ---------------- */
+  .crumbs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px;font-size:13px;color:var(--navy-800);}
+  .crumbs button{background:transparent;color:var(--navy-700);font-weight:700;padding:4px 8px;border-radius:6px;}
+  .crumbs button:hover{background:var(--sand-100);}
+  .crumbs .sep{color:var(--muted);}
+  .click-card{cursor:pointer;transition:.15s;}
+  .click-card:hover{box-shadow:0 6px 16px rgba(12,31,61,.12);transform:translateY(-2px);}
+  .progress-track{height:8px;background:var(--sand-100);border-radius:6px;overflow:hidden;margin-top:8px;}
+  .progress-fill{height:100%;border-radius:6px;background:var(--navy-600);}
+
+  /* ---------------- شيت البيانات القابل للتعديل المباشر ---------------- */
+  .cell-input{width:100%;padding:6px 8px;border:1px solid transparent;border-radius:6px;background:transparent;font-size:13px;}
+  .cell-input:hover{border-color:var(--line);}
+  .cell-input:focus{outline:none;border-color:var(--gold-500);background:#fff;}
+  .sheet-toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+  .sheet-toolbar a.icon-btn{text-decoration:none;display:inline-flex;align-items:center;}
+  /* ---------------- PR team hierarchy ---------------- */
+  .pr-team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;}
+  .pr-team-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;cursor:pointer;transition:.15s;}
+  .pr-team-card:hover{box-shadow:0 8px 20px rgba(12,31,61,.12);transform:translateY(-2px);}
+  .pr-team-card .team-title{font-size:16px;font-weight:800;color:var(--navy-900);margin-bottom:8px;}
+  .pr-team-card .team-meta{font-size:12px;color:var(--muted);line-height:1.8;}
+  .member-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;}
+  .member-card{background:#fff;border:1px solid var(--line);border-radius:15px;padding:16px;cursor:pointer;}
+  .member-card:hover{box-shadow:0 7px 18px rgba(12,31,61,.11);}
+  .member-card .member-name{font-weight:800;color:var(--navy-900);font-size:15px;}
+  .member-card .member-role{font-size:11.5px;color:var(--muted);margin-top:3px;}
+  .member-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:12px;}
+  .member-stat{background:var(--sand-50);border-radius:9px;padding:8px;text-align:center;}
+  .member-stat b{display:block;font-size:16px;color:var(--navy-800);}
+  .member-stat span{font-size:10px;color:var(--muted);}
+  .detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;}
+  .detail-item{background:var(--sand-50);border-radius:10px;padding:11px;}
+  .detail-item .k{font-size:11px;color:var(--muted);margin-bottom:3px;}
+  .detail-item .v{font-size:13px;font-weight:700;word-break:break-word;}
+  .link-box{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;}
+  .link-box a{color:var(--navy-700);font-weight:700;text-decoration:none;}
+</style>
+
+<script>
+(function(){
+  const LOGO = "logo.png";
+  /* اللوجو بيتحمّل من ملف صورة اسمه logo.png، موجود في نفس مستوى index.html
+     في الريبو (root) — زي ما هو فعليًا على GitHub دلوقتي. */
+  /* النظام يعمل بدون Supabase. الحسابات والبيانات تُحفظ في Google Sheets. */
+  const ROLE_LABELS = {
+    admin:'مدير النظام', hr:'HR',
+    pr_manager:'المدير العام للعلاقات العامة',
+    pr_leader:'رئيس فريق - العلاقات العامة',
+    pr_member:'عضو فريق - العلاقات العامة',
+    pr_out:'علاقات عامة - أوت دور', pr_in:'علاقات عامة - إن دور',
+    reception:'استقبال', accounting:'حسابات', callcenter:'كول سنتر', accommodation:'تسكين', system:'حجوزات النظام',
+    analyst:'مسؤول تحليل البيانات'
+  };
+
+  const ALEX_AREAS = ['سيدي جابر','سموحة','ستانلي','جليم','لوران','رشدي','الإبراهيمية','فلمنج','محرم بك',
+    'كرموز','العطارين','المنشية','باكوس','العجمي','المندرة','أبو قير','سيدي بشر','المعمورة','برج العرب','الأزاريطة'];
+
+  const EGYPT_GOVERNORATES = ['القاهرة','الجيزة','الإسكندرية','الدقهلية','البحر الأحمر','البحيرة','الفيوم','الغربية',
+    'الإسماعيلية','المنوفية','المنيا','القليوبية','الوادي الجديد','السويس','أسوان','أسيوط','بني سويف','بورسعيد',
+    'دمياط','الشرقية','جنوب سيناء','كفر الشيخ','مطروح','الأقصر','قنا','شمال سيناء','سوهاج'];
+
+  const ROOM_TYPES = ['رجال','سيدات','عائلية'];
+
+  /* ---------------- Module definitions (generic CRUD engine) ---------------- */
+  const MODULES = {
+    teams:{ title:'الفرق', icon:'🧩', roles:['admin','hr','pr_manager'],
+      fields:[
+        {key:'name', label:'اسم الفريق', type:'text', required:true},
+        {key:'department', label:'القسم', type:'select', options:Object.values(ROLE_LABELS)},
+        {key:'leader', label:'قائد الفريق (Team Leader)', type:'dynamicSelect', ref:'employees', refField:'name'},
+        {key:'notes', label:'ملاحظات', type:'textarea'},
+      ]},
+    employees:{ title:'الموظفون', icon:'👥', roles:['admin','hr','pr_manager','pr_leader','pr_member'],
+      fields:[
+        {key:'photo', label:'الصورة', type:'image'},
+        {key:'name', label:'الاسم', type:'text', required:true},
+        {key:'specialNumber', label:'الرقم القومي', type:'text'},
+        {key:'companyNumber', label:'رقم الشركة', type:'text'},
+        {key:'department', label:'القسم', type:'select', options:Object.values(ROLE_LABELS)},
+        {key:'team', label:'الفريق', type:'dynamicSelect', ref:'teams', refField:'name'},
+        {key:'phone', label:'رقم الهاتف', type:'text'},
+        {key:'address', label:'العنوان', type:'text'},
+        {key:'hireDate', label:'تاريخ التعيين', type:'date'},
+        {key:'salary', label:'الراتب', type:'number'},
+        {key:'username', label:'اسم المستخدم', type:'readonly'},
+        {key:'status', label:'حالة الموظف', type:'select', options:['active','inactive']},
+      ]},
+    companies:{ title:'الشركات (أوت دور)', icon:'🏢', roles:['admin','pr_out'],
+      fields:[
+        {key:'name', label:'اسم الشركة', type:'text', required:true},
+        {key:'area', label:'الحي / المنطقة', type:'select', options:ALEX_AREAS},
+        {key:'contactName', label:'اسم المسؤول', type:'text'},
+        {key:'contactPhone', label:'رقم المسؤول', type:'text'},
+        {key:'responsiblePerson', label:'مندوب العلاقات العامة المسؤول', type:'dynamicSelect',
+          ref:'employees', refField:'name', filter:{field:'department', value:'علاقات عامة - أوت دور'}},
+        {key:'details', label:'تفاصيل', type:'textarea'},
+      ]},
+    visits:{ title:'تقارير الزيارات', icon:'📋', roles:['admin','pr_out'],
+      fields:[
+        {key:'companyName', label:'الشركة', type:'text', required:true},
+        {key:'visitedBy', label:'الموظف اللي عمل الزيارة', type:'dynamicSelect',
+          ref:'employees', refField:'name'},
+        {key:'date', label:'تاريخ الزيارة', type:'date'},
+        {key:'status', label:'حالة الزيارة', type:'select',
+          options:['تم التواصل','لم تتم الزيارة','تم تحديد معاد','تم الرفض','تحت التفاوض','لم يتم التوصل لأي شيء']},
+        {key:'notes', label:'ملاحظات', type:'textarea'},
+      ]},
+    indoor_leads:{ title:'المهتمون والمندوبين', icon:'🎯', roles:['admin','pr_in','pr_manager','pr_leader','pr_member'],
+      fields:[
+        {key:'name', label:'الاسم', type:'text', required:true},
+        {key:'code', label:'كود العميل', type:'readonly'},
+        {key:'phone', label:'رقم الهاتف', type:'text'},
+        {key:'nationalId', label:'الرقم القومي', type:'text'},
+        {key:'registrationDate', label:'تاريخ التسجيل', type:'date', required:true},
+        {key:'type', label:'النوع', type:'select', options:['مهتم','مندوب']},
+        {key:'company', label:'الشركة', type:'dynamicSelect', ref:'companies', refField:'name'},
+        {key:'status', label:'الحالة', type:'select', options:['جديد','تم التواصل','تحويل لحجز','مشترك']},
+        {key:'sourceType', label:'جاي عن طريق', type:'select',
+          options:['مندوب','علاقات عامة','ريسبشن','ميديا']},
+        {key:'responsiblePerson', label:'اسم المسؤول عنه', type:'dynamicSelect', ref:'employees', refField:'name'},
+        {key:'managerRep', label:'شغال تحت إشراف مندوب', type:'dynamicSelect',
+          ref:'indoor_leads', refField:'name', filter:{field:'type', value:'مندوب'}},
+        {key:'notes', label:'ملاحظات', type:'textarea'},
+      ]},
+    indoor_data:{ title:'الداتا والأرقام', icon:'📊', roles:['admin','pr_in','pr_manager','pr_leader','pr_member'],
+      fields:[
+        {key:'name', label:'الاسم', type:'text'},
+        {key:'phone', label:'رقم الهاتف', type:'text', required:true},
+        {key:'source', label:'مصدر الرقم', type:'text'},
+        {key:'responsiblePerson', label:'المندوب المسؤول', type:'dynamicSelect',
+          ref:'employees', refField:'name', filter:{field:'department', value:'علاقات عامة - إن دور'}},
+        {key:'notes', label:'ملاحظات', type:'textarea'},
+      ]},
+    callcenter_feedback:{ title:'فيدباك عملاء العمرة', icon:'📞', roles:['admin','callcenter'],
+      fields:[
+        {key:'clientName', label:'اسم العميل', type:'text', required:true},
+        {key:'phone', label:'رقم الهاتف', type:'text'},
+        {key:'tripDate', label:'تاريخ الرحلة', type:'date'},
+        {key:'rating', label:'التقييم', type:'select', options:['5','4','3','2','1']},
+        {key:'feedback', label:'الفيدباك', type:'textarea'},
+      ]},
+    callcenter_payments:{ title:'متابعة المتأخرين في السداد', icon:'⏰', roles:['admin','callcenter'],
+      fields:[
+        {key:'clientName', label:'اسم العميل', type:'text', required:true},
+        {key:'phone', label:'رقم الهاتف', type:'text'},
+        {key:'amountDue', label:'المبلغ المتأخر', type:'number'},
+        {key:'lastContactDate', label:'آخر متابعة', type:'date'},
+        {key:'notes', label:'ملاحظات', type:'textarea'},
+      ]},
+    accommodation:{ title:'التسكين', icon:'🏨', roles:['admin','accommodation','system'],
+      fields:[
+        {key:'clientName', label:'اسم العميل', type:'text', required:true},
+        {key:'passportNumber', label:'رقم الجواز', type:'text'},
+        {key:'trip', label:'الرحلة', type:'text'},
+        {key:'daysRemaining', label:'المتبقي (أيام)', type:'number'},
+        {key:'roomOccupants', label:'عدد أفراد الأوضة', type:'number'},
+        {key:'hotel', label:'الفندق', type:'text'},
+        {key:'flightStatus', label:'حالة حجز الطيران', type:'select', options:['لم يُحجز','تم الحجز']},
+      ]},
+    trips_hub:{ title:'الرحلات', icon:'🧳', roles:['admin','accommodation','system'],
+      fields:[]},
+
+    pr_member_data:{ title:'الداتا والأرقام واللينكات', icon:'🔗', roles:['admin','pr_manager','pr_leader','pr_member'],
+      fields:[
+        {key:'memberId', label:'عضو الفريق', type:'dynamicSelect', ref:'employees', refField:'name'},
+        {key:'title', label:'اسم الداتا / الرقم / اللينك', type:'text', required:true},
+        {key:'phone', label:'رقم الهاتف', type:'text'},
+        {key:'link', label:'الرابط', type:'url'},
+        {key:'data', label:'تفاصيل الداتا', type:'textarea'},
+        {key:'notes', label:'ملاحظات', type:'textarea'},
+      ]},
+
+    subscriptions:{ title:'الاشتراكات', icon:'💳', roles:['admin','pr_manager','pr_leader','pr_member'],
+      fields:[
+        {key:'leadId', label:'كود العميل', type:'readonly'},
+        {key:'customerName', label:'اسم العميل', type:'text', required:true},
+        {key:'nationalId', label:'الرقم القومي', type:'text'},
+        {key:'phone', label:'رقم الهاتف', type:'text'},
+        {key:'gender', label:'جنس العميل', type:'select', options:['ذكر','أنثى'], required:true},
+        {key:'governorate', label:'المحافظة', type:'select', options:EGYPT_GOVERNORATES, required:true},
+        {key:'groupName', label:'اسم المجموعة', type:'text'},
+        {key:'responsiblePerson', label:'المسؤول', type:'dynamicSelect', ref:'employees', refField:'name'},
+        {key:'subscriptionDate', label:'تاريخ الاشتراك', type:'date', required:true},
+        {key:'packageType', label:'نوع الباقة', type:'select',
+          options:['','عمرة كاش','عمرة قسط','عمرة تيسير','تيسير رمضان','حج قرعة تيسير','حج قرعة عادي','حج سياحي']},
+        {key:'installmentMonths', label:'عدد شهور التقسيط', type:'number'},
+        {key:'installmentAmount', label:'قيمة القسط', type:'number'},
+        {key:'downPayment', label:'المقدم', type:'number'},
+        {key:'tripId', label:'الرحلة (التسكين)', type:'linkSelect', ref:'trips'},
+        {key:'hotelId', label:'الفندق', type:'linkSelect', ref:'accom_hotels', parentKey:'tripId'},
+        {key:'roomId', label:'الغرفة', type:'linkSelect', ref:'accom_rooms', parentKey:'hotelId'},
+        {key:'lotteryStatus', label:'حالة القرعة', type:'select', options:['لسه مش عارف','فائز','لم يفز']},
+        {key:'travelStatus', label:'حالة السفر', type:'select', options:['لسه مسافر','سافر']},
+        {key:'subscriptionStatus', label:'حالة الاشتراك', type:'select', options:['نشط','مكتمل','ملغي']},
+        {key:'notes', label:'ملاحظات', type:'textarea'},
+      ]},
+
+    winners:{ title:'الفائزون', icon:'🏆', roles:['admin','pr_manager','pr_leader','pr_member'], fields:[]},
+  };
+
+  const LEDGER_FIELDS = [
+    {key:'clientName', label:'اسم العميل', type:'text', required:true},
+    {key:'date', label:'التاريخ', type:'date', required:true},
+    {key:'description', label:'البيان', type:'text'},
+    {key:'packageType', label:'نوع الباقة', type:'select',
+      options:['','عمرة كاش','عمرة قسط','عمرة تيسير','تيسير رمضان','حج قرعة تيسير','حج قرعة عادي','حج سياحي']},
+    {key:'debit', label:'مدين (على العميل)', type:'number'},
+    {key:'credit', label:'دائن (مدفوع من العميل)', type:'number'},
+  ];
+
+  /* ---------------- Google Sheets backend ---------------- */
+  const GOOGLE_SHEETS_WEBHOOK = 'https://script.google.com/macros/s/AKfycbw7Cnm2cgOiB_6MJ2DJYP8NsLaNDXtbaJKRrLiri4LizkMr7s1Q8-AOzRX8uEg5t_pr/exec';
+  let HOMSA_SESSION = sessionStorage.getItem('homsa_session_token') || '';
+
+  async function authRequest(action, payload){
+    if(!GOOGLE_SHEETS_WEBHOOK) throw new Error('رابط Google Sheets غير مضبوط');
+    if(!HOMSA_SESSION) throw new Error('انتهت جلسة الدخول — سجّل الدخول مرة أخرى');
+    const r=await fetch(GOOGLE_SHEETS_WEBHOOK,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action,payload:payload||{},session:HOMSA_SESSION}),
+      cache:'no-store'
+    });
+    const data=await r.json().catch(()=>({ok:false,error:'استجابة غير صالحة من الخادم'}));
+    if(!data.ok){
+      if(data.error==='Unauthorized'){
+        HOMSA_SESSION='';
+        sessionStorage.removeItem('homsa_session_token');
+        sessionStorage.removeItem('homsa_session_user');
+        state.user=null;
+      }
+      throw new Error(data.error||'فشل تنفيذ العملية');
+    }
+    return data;
+  }
+
+  async function sheetRequest(action, table, payload){
+    if(!GOOGLE_SHEETS_WEBHOOK) throw new Error('رابط Google Sheets غير مضبوط');
+    if(!HOMSA_SESSION) throw new Error('انتهت جلسة الدخول — سجّل الدخول مرة أخرى');
+    if(action==='list'){
+      const r=await fetch(GOOGLE_SHEETS_WEBHOOK,{method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({action:'list',table,payload:{},session:HOMSA_SESSION}),
+        cache:'no-store'});
+      const data=await r.json();
+      if(!data.ok) {
+        if(data.error==='Unauthorized'){ HOMSA_SESSION=''; sessionStorage.removeItem('homsa_session_token'); sessionStorage.removeItem('homsa_session_user'); state.user=null; }
+        throw new Error(data.error||'فشل تحميل البيانات من Google Sheets');
+      }
+      return data.rows||[];
+    }
+    const r=await fetch(GOOGLE_SHEETS_WEBHOOK,{method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action,table,payload,session:HOMSA_SESSION,at:new Date().toISOString()}),
+      keepalive:true});
+    const data=await r.json().catch(()=>({ok:true}));
+    if(!data.ok) throw new Error(data.error||'فشل حفظ البيانات في Google Sheets');
+    return data;
+  }
+
+  async function sheetRequestBulk(tables){
+    if(!GOOGLE_SHEETS_WEBHOOK) throw new Error('رابط Google Sheets غير مضبوط');
+    if(!HOMSA_SESSION) throw new Error('انتهت جلسة الدخول — سجّل الدخول مرة أخرى');
+    const r=await fetch(GOOGLE_SHEETS_WEBHOOK,{method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action:'bulk',tables,payload:{},session:HOMSA_SESSION}),
+      cache:'no-store'});
+    const data=await r.json();
+    if(!data.ok){
+      if(data.error==='Unauthorized'){ HOMSA_SESSION=''; sessionStorage.removeItem('homsa_session_token'); sessionStorage.removeItem('homsa_session_user'); state.user=null; }
+      throw new Error(data.error||'فشل تحميل البيانات من Google Sheets');
+    }
+    return data.tables||{};
+  }
+
+  /* ---------------- Storage helpers ---------------- */
+  async function loadList(key){
+    try{ return await sheetRequest('list',key); }
+    catch(e){ console.error('Google Sheets load error', key, e); return []; }
+  }
+
+  async function apiAdd(table, record){
+    if(!record.id) record.id=uid();
+    await sheetRequest('upsert',table,record);
+    cacheUpsertLocal(table, record);
+    if(table==='subscriptions') invalidate('accom_guests');
+    return record;
+  }
+
+  async function apiUpdate(table, record){
+    await sheetRequest('upsert',table,record);
+    cacheUpsertLocal(table, record);
+    if(table==='subscriptions') invalidate('accom_guests');
+  }
+
+  async function apiDelete(table, id){
+    await sheetRequest('delete',table,{id});
+    cacheDeleteLocal(table, id);
+    if(table==='subscriptions') invalidate('accom_guests');
+  }
+
+  async function apiDeleteMany(table, ids){
+    ids = (ids||[]).filter(Boolean);
+    if(!ids.length) return;
+    try{
+      await sheetRequest('batchDelete',table,{ids});
+      ids.forEach(id=>cacheDeleteLocal(table,id));
+      if(table==='subscriptions') invalidate('accom_guests');
+    }catch(e){
+      console.error('batchDelete fallback', table, e);
+      await Promise.all(ids.map(id=>apiDelete(table,id)));
+      if(table==='subscriptions') invalidate('accom_guests');
+    }
+  }
+
+  async function apiAddMany(table, records){
+    records = (records||[]).filter(Boolean);
+    if(!records.length) return records;
+    records.forEach(r=>{ if(!r.id) r.id=uid(); });
+    try{
+      await sheetRequest('batchUpsert',table,{rows:records});
+      records.forEach(r=>cacheUpsertLocal(table,r));
+      if(table==='subscriptions') invalidate('accom_guests');
+    }catch(e){
+      console.error('batchUpsert fallback', table, e);
+      await Promise.all(records.map(r=>sheetRequest('upsert',table,r)));
+      records.forEach(r=>cacheUpsertLocal(table,r));
+      if(table==='subscriptions') invalidate('accom_guests');
+    }
+    return records;
+  }
+
+  const cache = {};
+  async function getData(key){ if(!cache[key]) cache[key] = await loadList(key); return cache[key]; }
+  function invalidate(key){ cache[key] = null; }
+
+  function cacheUpsertLocal(table, record){
+    if(!cache[table] || !record || record.id===undefined) return;
+    const idx = cache[table].findIndex(r=>String(r.id)===String(record.id));
+    if(idx>=0) cache[table][idx] = {...cache[table][idx], ...record};
+    else cache[table] = [...cache[table], record];
+  }
+  function cacheDeleteLocal(table, id){
+    if(!cache[table]) return;
+    cache[table] = cache[table].filter(r=>String(r.id)!==String(id));
+  }
+
+  async function getDataMany(keys){
+    const need = [...new Set(keys)].filter(k=>!cache[k]);
+    if(need.length){
+      try{
+        const result = await sheetRequestBulk(need);
+        need.forEach(k=>{ cache[k] = result[k] || []; });
+      }catch(e){
+        console.error('bulk load error, falling back to parallel single loads', e);
+        await Promise.all(need.map(async k=>{ cache[k] = await loadList(k); }));
+      }
+    }
+    const out={}; keys.forEach(k=>out[k]=cache[k]||[]); return out;
+  }
+
+  // تحميل مسبق في الخلفية: بعد ما اليوزر يعمل لوجين، بنجيب كل الجداول اللي دوره
+  // يقدر يشوفها بنداء واحد (bulk) من غير ما نستنى النتيجة (مش await في مكان الاستدعاء)،
+  // عشان لما يدوس على أي قسم بعد كده، البيانات تبقى موجودة في الكاش جاهزة على طول
+  // من غير ما يستنى نداء جديد لـ Apps Script (وده أكبر سبب في حس التقيل عند التنقل
+  // بين الصفحات). لو النداء فشل لأي سبب، مفيش أي تأثير على الشغل العادي — كل صفحة
+  // لسه بتجيب بياناتها بنفسها لما تتفتح زي ما كانت بالظبط.
+  async function prefetchAllData(){
+    try{
+      const role = state.user && state.user.role;
+      if(!role) return;
+      const keys = new Set(['employees','dashboards','widgets']);
+      accessibleModules().forEach(([k,m])=>{ if(m.fields && m.fields.length) keys.add(k); });
+      if(MODULES.accommodation.roles.includes(role)){
+        ['accom_hotels','accom_rooms','accom_guests'].forEach(k=>keys.add(k));
+      }
+      if(MODULES.trips_hub.roles.includes(role)){
+        ['trips','trip_hotels','accom_hotels','accom_rooms','accom_guests'].forEach(k=>keys.add(k));
+      }
+      if(MODULES.winners.roles.includes(role)){
+        ['subscriptions','trips','accom_hotels','accom_rooms'].forEach(k=>keys.add(k));
+      }
+      await getDataMany([...keys]);
+    }catch(e){ console.error('background prefetch error', e); }
+  }
+
+  /* ---------------- App state ---------------- */
+  let state = { user:null, view:'dashboard', sidebarOpen:false, modal:null };
+
+  const root = document.getElementById('app-root');
+
+  function uid(){ return 'id'+Math.random().toString(36).slice(2,10); }
+  function esc(s){ return (s===undefined||s===null)?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  // أداة debounce عامة: بتأجل تنفيذ الدالة لحد ما المستخدم يوقف عن الكتابة/الضغط
+  // لمدة `wait` مللي ثانية. بنستخدمها في خانات البحث عشان منعملش إعادة رسم كاملة
+  // للجدول مع كل حرف يتكتب (وده كان أكبر سبب لاج محسوس أثناء الكتابة).
+  function debounce(fn, wait){
+    let t;
+    return function(...args){
+      clearTimeout(t);
+      t = setTimeout(()=>fn.apply(this,args), wait);
+    };
+  }
+  function roomTypeBadge(t){
+    const map = {'رجال':'blue','سيدات':'gold','عائلية':'green'};
+    return t? `<span class="badge ${map[t]||'gray'}">${esc(t)}</span>` : `<span class="badge gray">غير محدد</span>`;
+  }
+  function linkLabel(ref, r){
+    if(!r) return '';
+    if(ref==='trips') return (r.label? r.label+' — ':'') + (r.date||'بدون تاريخ');
+    if(ref==='accom_hotels') return r.name + (r.location? ' — '+r.location : '');
+    if(ref==='accom_rooms') return 'غرفة ' + (r.roomNumber||'') + (r.roomType? ' — '+r.roomType:'');
+    return r.name || r.title || r.id;
+  }
+
+  function generateCustomerCode(phone){
+    const digits = String(phone||'').replace(/\D/g,'');
+    const last4 = (digits.slice(-4) || '0000').padStart(4,'0');
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2,'0');
+    const mm = String(now.getMonth()+1).padStart(2,'0');
+    return 'ID' + last4 + dd + mm;
+  }
+
+  function submitGuard(form){
+    const btn = form.querySelector('button[type=submit]');
+    if(!btn) return {ok:true, release:()=>{}};
+    if(btn.disabled) return {ok:false, release:()=>{}};
+    const origText = btn.textContent;
+    btn.disabled = true; btn.textContent = 'جارٍ الحفظ...';
+    return {ok:true, release:()=>{ btn.disabled=false; btn.textContent=origText; }};
+  }
+
+  async function linkSelectOptionsFor(moduleKey, f, parentVal){
+    if(moduleKey==='subscriptions' && f.key==='hotelId' && f.ref==='accom_hotels' && f.parentKey==='tripId'){
+      if(!parentVal) return [];
+      const tripHotels = await getData('trip_hotels');
+      const hotels = await getData('accom_hotels');
+      const hotelIds = tripHotels.filter(th=>String(th.tripId)===String(parentVal)).map(th=>th.hotelId);
+      return hotels.filter(h=>hotelIds.includes(h.id)).map(h=>({id:h.id, label: linkLabel('accom_hotels', h)}));
+    }
+    const refList = await getData(f.ref);
+    if(!f.parentKey) return refList.map(r=>({id:r.id, label: linkLabel(f.ref, r)}));
+    const list = parentVal? refList.filter(r=> String(r[f.parentKey])===String(parentVal)) : [];
+    return list.map(r=>({id:r.id, label: linkLabel(f.ref, r)}));
+  }
+
+
+  /* ---------------- PR access control ---------------- */
+  function isPRUser(){ return ['pr_manager','pr_leader','pr_member'].includes(state.user?.role); }
+  function currentEmployee(){
+    if(!state.user) return null;
+    const list = cache.employees || [];
+    return list.find(e => (e.username && state.user.username && String(e.username).toLowerCase()===String(state.user.username).toLowerCase())
+      || e.id===state.user.employeeId) || null;
+  }
+  async function currentEmployeeFresh(){
+    const emps=await getData('employees');
+    return emps.find(e => (e.username && state.user.username && String(e.username).toLowerCase()===String(state.user.username).toLowerCase())
+      || e.id===state.user.employeeId) || null;
+  }
+  async function prTeamName(){
+    const emp=await currentEmployeeFresh();
+    return emp?.team || state.user?.team || '';
+  }
+  async function prTeamMembers(){
+    const emps=await getData('employees');
+    if(state.user.role==='pr_manager') return emps.filter(e=>e.status!=='inactive');
+    const team=await prTeamName();
+    return emps.filter(e=>e.status!=='inactive' && e.team===team);
+  }
+  async function prAllowedNames(){
+    const members=await prTeamMembers();
+    return new Set(members.map(e=>e.name).filter(Boolean));
+  }
+  async function filterPRData(key,data){
+    if(!isPRUser()) return data;
+    if(state.user.role==='pr_manager') return data;
+    const emp=await currentEmployeeFresh();
+    const myName=emp?.name || state.user.name;
+    const teamNames=await prAllowedNames();
+    if(key==='employees') return data.filter(r=>teamNames.has(r.name));
+    if(key==='teams') {
+      const team=await prTeamName();
+      return data.filter(r=>r.name===team);
+    }
+    if(key==='indoor_leads' || key==='indoor_data' || key==='subscriptions'){
+      return data.filter(r=>teamNames.has(r.responsiblePerson) && (state.user.role==='pr_leader' || r.responsiblePerson===myName));
+    }
+    if(key==='pr_member_data'){
+      return data.filter(r=>teamNames.has(r.memberId) && (state.user.role==='pr_leader' || r.memberId===myName));
+    }
+    return data;
+  }
+  function prCanEditRow(key,row){
+    if(!isPRUser()) return true;
+    if(state.user.role==='pr_manager') return true;
+    const myName = currentEmployee()?.name || state.user.name;
+    if(state.user.role==='pr_leader'){
+      if(['indoor_leads','indoor_data','subscriptions'].includes(key)) return true;
+      if(key==='pr_member_data') return true;
+      return false;
+    }
+    if(key==='indoor_leads' || key==='indoor_data' || key==='subscriptions') return !row?.id || row.responsiblePerson===myName;
+    if(key==='pr_member_data') return !row?.id || row.memberId===myName;
+    return key==='employees' && row?.name===myName;
+  }
+  async function maybeCreateSubscriptionFromLead(lead){
+    if(lead.type!=='مهتم' || lead.status!=='مشترك') return;
+    const subs=await getData('subscriptions');
+    if(subs.some(s=>String(s.leadId||'')===String(lead.id))) return;
+    const sub={
+      id:uid(), leadId:lead.id, customerName:lead.name||'', nationalId:lead.nationalId||'', phone:lead.phone||'',
+      gender:'', governorate:'', groupName:'',
+      responsiblePerson:lead.responsiblePerson||'', subscriptionDate:new Date().toISOString().slice(0,10),
+      packageType:'', installmentMonths:'', installmentAmount:'', downPayment:'',
+      lotteryStatus:'لسه مش عارف', travelStatus:'لسه مسافر',
+      subscriptionStatus:'نشط', notes:lead.notes||''
+    };
+    await apiAdd('subscriptions',sub);
+  }
+
+  async function syncSubscriptionGuest(sub){
+    const guests = await getData('accom_guests');
+    const existing = guests.find(g=>String(g.subscriptionId||'')===String(sub.id));
+
+    if(!sub.roomId){
+      if(existing) await apiDelete('accom_guests', existing.id);
+      return;
+    }
+
+    const rec = {
+      id: existing? existing.id : uid(),
+      subscriptionId: sub.id,
+      roomId: sub.roomId,
+      tripId: sub.tripId||'',
+      name: sub.customerName||'',
+      nationalId: sub.nationalId||'',
+      phone: sub.phone||'',
+      passportNumber: existing? (existing.passportNumber||'') : '',
+      flightStatus: existing? (existing.flightStatus||'لم يُحجز') : 'لم يُحجز',
+      notes: existing? (existing.notes||'') : ''
+    };
+    if(existing) await apiUpdate('accom_guests', rec); else await apiAdd('accom_guests', rec);
+  }
+
+  async function render(){
+    if(!state.user){ renderLogin(); return; }
+    if(!root.querySelector('.shell')){
+      buildShell();
+      prefetchAllData(); // من غير await قصدًا: يشتغل في الخلفية ومايأخرش عرض الداشبورد
+    } else {
+      const sb = root.querySelector('.sidebar');
+      if(sb) sb.classList.toggle('open', !!state.sidebarOpen);
+    }
+    updateActiveNav();
+    await renderPage();
+  }
+
+  function updateActiveNav(){
+    root.querySelectorAll('.nav-item').forEach(b=>{
+      b.classList.toggle('active', b.dataset.view===state.view);
+    });
+  }
+
+  function renderLogin(){
+    root.innerHTML = `
+      <div class="login-wrap">
+        <div class="login-card">
+          <div class="arch-top"><img src="${LOGO}" alt="همسة"/></div>
+          <div class="login-body">
+            <h1>نظام إدارة همسة للسياحة</h1>
+            <p class="sub">سجّل دخولك للمتابعة</p>
+            ${state.loginError? `<div class="error-box">${esc(state.loginError)}</div>`:''}
+            <form id="login-form">
+              <div class="field"><label>اسم المستخدم</label><input id="login-u" type="text" autocomplete="username" required/></div>
+              <div class="field"><label>كلمة المرور</label><input id="login-p" type="password" autocomplete="current-password" required/></div>
+              <button class="btn-primary btn-gold" type="submit">تسجيل الدخول</button>
+            </form>
+          </div>
+        </div>
+      </div>`;
+    document.getElementById('login-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const btn = e.target.querySelector('button[type=submit]');
+      const u = document.getElementById('login-u').value.trim().toLowerCase();
+      const p = document.getElementById('login-p').value;
+      btn.textContent = 'جارٍ الدخول...'; btn.disabled = true;
+      try{
+        const response = await fetch(GOOGLE_SHEETS_WEBHOOK,{
+          method:'POST',
+          headers:{'Content-Type':'text/plain;charset=utf-8'},
+          body:JSON.stringify({action:'login',username:u,password:p}),
+          cache:'no-store'
+        });
+        const data = await response.json();
+        if(!data.ok) throw new Error(data.error||'اسم المستخدم أو كلمة المرور غير صحيحة');
+        HOMSA_SESSION=data.session;
+        sessionStorage.setItem('homsa_session_token',HOMSA_SESSION);
+        state.user = data.user; state.loginError=null; state.view='dashboard';
+        sessionStorage.setItem('homsa_session_user', JSON.stringify(data.user));
+        render();
+      }catch(err){
+        console.error('Login error', err);
+        state.loginError = err.message || 'تعذر تسجيل الدخول';
+        renderLogin();
+      }
+    });
+  }
+
+
+  function accessibleModules(){
+    const hiddenModules = new Set(['companies','callcenter_payments','indoor_data']);
+    if(state.user?.role==='pr_manager') {
+      return Object.entries(MODULES).filter(([k,m])=>!hiddenModules.has(k) && m.roles.includes('pr_manager'));
+    }
+    if(state.user?.role==='pr_leader' || state.user?.role==='pr_member') {
+      return Object.entries(MODULES).filter(([k,m])=>!hiddenModules.has(k) && m.roles.includes(state.user.role));
+    }
+    return Object.entries(MODULES).filter(([k,m])=>!hiddenModules.has(k) && m.roles.includes(state.user.role));
+  }
+
+  function analyticsAccessibleModules(){
+    if(state.user.role==='admin' || state.user.role==='analyst') return Object.entries(MODULES).filter(([k])=>!['companies','callcenter_payments','indoor_data'].includes(k));
+    return accessibleModules();
+  }
+
+  async function getSetting(key){
+    const rows = await getData('app_settings');
+    const row = rows.find(r=>r.key===key);
+    return row? (row.value||'') : '';
+  }
+  async function setSetting(key, value){
+    const rows = await getData('app_settings');
+    const row = rows.find(r=>r.key===key);
+    const rec = row? {...row, value} : {id:'cfg_'+key, key, value};
+    await apiAdd('app_settings', rec);
+  }
+
+  function buildShell(){
+    const mods = accessibleModules();
+    const navItems = [
+      `<button class="nav-item ${state.view==='dashboard'?'active':''}" data-view="dashboard">🏠<span>الرئيسية</span></button>`,
+      `<button class="nav-item ${state.view==='analytics'?'active':''}" data-view="analytics">📊<span>تحليل البيانات</span></button>`,
+    ];
+        if(isPRUser()){
+      navItems.push(`<button class="nav-item ${state.view==='pr_teams'?'active':''}" data-view="pr_teams">🧩<span>${state.user.role==='pr_member'?'بياناتي':'فرق العلاقات العامة'}</span></button>`);
+    }
+    mods.forEach(([k,m])=>{
+      navItems.push(`<button class="nav-item ${state.view===k?'active':''}" data-view="${k}">${m.icon}<span>${esc(m.title)}</span></button>`);
+    });
+
+    root.innerHTML = `
+      <div class="shell">
+        <div class="sidebar ${state.sidebarOpen?'open':''}">
+          <div class="sidebar-head"><img src="${LOGO}"/><span>همسة للسياحة</span></div>
+          <div class="nav">${navItems.join('')}</div>
+          <div class="sidebar-foot">
+            <div class="user-chip">
+              <div class="avatar">${esc(state.user.name[0])}</div>
+              <div><div class="name">${esc(state.user.name)}</div><div class="role">${esc(ROLE_LABELS[state.user.role])}</div></div>
+            </div>
+            <button class="logout-btn" id="account-btn" style="margin-bottom:6px;background:#3a3a3a;">تغيير بيانات الدخول</button>
+            <button class="logout-btn" id="logout-btn">تسجيل الخروج</button>
+          </div>
+        </div>
+        <div class="main">
+          <button class="menu-toggle" id="menu-toggle">☰ القائمة</button>
+          <div id="page"></div>
+        </div>
+      </div>`;
+
+    root.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click', ()=>{ state.view=b.dataset.view; state.sidebarOpen=false; render(); }));
+    document.getElementById('logout-btn').addEventListener('click', async ()=>{
+      const btn=document.getElementById('logout-btn');
+      if(btn) btn.disabled=true;
+      try{ if(HOMSA_SESSION) await authRequest('logout',{}); }catch(e){ console.warn('Logout server-side revoke failed',e); }
+      sessionStorage.removeItem('homsa_session_user');
+      sessionStorage.removeItem('homsa_session_token');
+      HOMSA_SESSION=''; state.user=null; state.view='dashboard'; render();
+    });
+    document.getElementById('account-btn').addEventListener('click', openChangeAccountForm);
+    document.getElementById('menu-toggle').addEventListener('click', ()=>{
+      state.sidebarOpen=!state.sidebarOpen;
+      const sb=root.querySelector('.sidebar'); if(sb) sb.classList.toggle('open', state.sidebarOpen);
+    });
+  }
+
+  async function renderPage(){
+    const page = document.getElementById('page');
+    if(!page) return;
+    const mods = accessibleModules();
+    if(['areas','ledger','companies','callcenter_payments','indoor_data'].includes(state.view)){
+      state.view='dashboard'; updateActiveNav();
+    }
+    if(state.view==='dashboard') await renderDashboard(page, mods);
+    else if(state.view==='pr_teams') await renderPRHierarchy(page);
+    else if(state.view==='analytics') await renderAnalytics(page, analyticsAccessibleModules());
+    else if(state.view==='accommodation') await renderAccommodationSection(page);
+    else if(state.view==='trips_hub') await renderTripsHub(page);
+    else if(state.view==='winners') await renderWinnersSection(page);
+    else if(MODULES[state.view]) await renderModule(page, state.view);
+  }
+
+  async function renderDashboard(page, mods){
+    const isAdmin = state.user.role==='admin';
+    let statsHtml = '';
+    if(isPRUser()){
+      await getDataMany(['employees','indoor_leads','subscriptions']);
+      const members=await prTeamMembers();
+      const leads=await filterPRData('indoor_leads', await getData('indoor_leads'));
+      const subs=await filterPRData('subscriptions', await getData('subscriptions'));
+      statsHtml = `<div class="stat-grid">
+        <div class="stat-card"><div class="num">${members.length}</div><div class="lbl">${state.user.role==='pr_member'?'بياناتي':'أعضاء الفريق'}</div></div>
+        <div class="stat-card"><div class="num">${leads.filter(x=>x.type==='مهتم').length}</div><div class="lbl">المهتمون المسموح برؤيتهم</div></div>
+        <div class="stat-card"><div class="num">${leads.filter(x=>x.type==='مندوب').length}</div><div class="lbl">المندوبون</div></div>
+        <div class="stat-card"><div class="num">${subs.length}</div><div class="lbl">الاشتراكات</div></div>
+      </div>`;
+    } else if(isAdmin){
+      const dash = await getDataMany(['employees','companies','accounting']);
+      const emp = dash.employees, comp = dash.companies, acc = dash.accounting;
+      statsHtml = `<div class="stat-grid">
+        <div class="stat-card"><div class="num">${emp.length}</div><div class="lbl">إجمالي الموظفين</div></div>
+        <div class="stat-card"><div class="num">${comp.length}</div><div class="lbl">الشركات المسجلة</div></div>
+        <div class="stat-card"><div class="num">${acc.length}</div><div class="lbl">حالات الحسابات</div></div>
+        <div class="stat-card"><div class="num">${mods.length}</div><div class="lbl">الأقسام المتاحة</div></div>
+      </div>`;
+    }
+    page.innerHTML = `
+      <div class="page-head"><h2>مرحبًا، ${esc(state.user.name)} 👋</h2></div>
+      ${statsHtml}
+      <div class="assumption-note">نظام الصلاحيات الجديد يفصل بيانات العلاقات العامة حسب الفريق والعضو: المدير العام يرى الكل، الـTeam Leader يرى فريقه، وعضو الفريق يرى بياناته ومهتميه فقط.</div>
+      <div class="card"><h3>الأقسام المتاحة لك</h3>
+        <div class="areas-grid">
+          ${mods.map(([k,m])=>`<div class="area-chip" style="cursor:pointer" data-go="${k}"><div class="cnt">${m.icon}</div><div class="nm">${esc(m.title)}</div></div>`).join('')}
+        </div>
+      </div>`;
+    page.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click', ()=>{ state.view=el.dataset.go; render(); }));
+  }
+
+
+  async function renderPRHierarchy(page){
+    await getDataMany(['teams','employees','indoor_leads','pr_member_data','indoor_data','subscriptions']);
+    const teams=await getData('teams');
+    const members=await prTeamMembers();
+    const leads=await getData('indoor_leads');
+    const memberData=await getData('pr_member_data');
+    const legacyData=await getData('indoor_data');
+    const dataRows=[...memberData, ...legacyData.map(r=>({
+      id:r.id, memberId:r.responsiblePerson||'', title:r.name||'داتا / رقم', phone:r.phone||'',
+      link:r.link||'', data:r.source||'', notes:r.notes||''
+    }))];
+    const subs=await getData('subscriptions');
+    const teamNames=[...new Set(members.map(m=>m.team).filter(Boolean))];
+    const visibleTeams = state.user.role==='pr_manager' ? teams.filter(t=>t.department===ROLE_LABELS.pr_in || t.department==='علاقات عامة - إن دور' || teamNames.includes(t.name))
+      : teams.filter(t=>teamNames.includes(t.name));
+    if(state.user.role==='pr_member'){
+      const me=await currentEmployeeFresh();
+      const my=me?.name||state.user.name;
+      const mine=members.find(m=>m.name===my) || me || {name:my,team:await prTeamName()};
+      const myLeads=leads.filter(x=>x.responsiblePerson===my);
+      const myData=dataRows.filter(x=>x.memberId===my);
+      const mySubs=subs.filter(x=>x.responsiblePerson===my);
+      page.innerHTML=`
+        <div class="page-head"><h2>👤 بياناتي في العلاقات العامة</h2></div>
+        <div class="card">
+          <h3>${esc(mine.name||my)}</h3>
+          <div class="detail-grid">
+            <div class="detail-item"><div class="k">الفريق</div><div class="v">${esc(mine.team||'بدون فريق')}</div></div>
+            <div class="detail-item"><div class="k">الهاتف</div><div class="v">${esc(mine.phone||'—')}</div></div>
+            <div class="detail-item"><div class="k">عدد المهتمين</div><div class="v">${myLeads.filter(x=>x.type==='مهتم').length}</div></div>
+            <div class="detail-item"><div class="k">عدد المندوبين</div><div class="v">${myLeads.filter(x=>x.type==='مندوب').length}</div></div>
+            <div class="detail-item"><div class="k">الاشتراكات</div><div class="v">${mySubs.length}</div></div>
+          </div>
+        </div>
+        <div class="card"><div class="page-head"><h3>🔗 داتا ولينكاتي</h3><button class="btn-primary btn-gold" id="my-add-data" style="width:auto;padding:8px 15px;">+ إضافة</button></div>
+          ${myData.length?myData.map(x=>`<div class="link-box"><div><b>${esc(x.title)}</b>${x.data?`<div style="font-size:12px;color:var(--muted)">${esc(x.data)}</div>`:''}</div>${x.link?`<a href="${esc(x.link)}" target="_blank" rel="noopener">فتح الرابط ↗</a>`:''}</div>`).join(''):'<div class="empty-state">لا توجد داتا أو لينكات بعد</div>'}
+        </div>`;
+      document.getElementById('my-add-data').addEventListener('click',()=>openForm('pr_member_data',null));
+      return;
+    }
+
+    page.innerHTML=`
+      <div class="page-head"><h2>🧩 ${state.user.role==='pr_manager'?'فرق العلاقات العامة بالكامل':'فريقي'}</h2></div>
+      <div class="assumption-note">المدير العام للعلاقات العامة يرى كل الفرق. الـTeam Leader يرى أعضاء فريقه فقط، وكل بطاقة تفتح تفاصيل العضو والمهتمين والمندوبين والاشتراكات والداتا الخاصة به.</div>
+      <div class="pr-team-grid">
+        ${visibleTeams.map(t=>{
+          const tm=members.filter(m=>m.team===t.name);
+          return `<div class="pr-team-card" data-team="${esc(t.name)}"><div class="team-title">🧩 ${esc(t.name)}</div>
+            <div class="team-meta">القائد: ${esc(t.leader||'—')}<br/>عدد الأعضاء: ${tm.length}</div></div>`;
+        }).join('') || '<div class="empty-state">لا توجد فرق مرتبطة بك.</div>'}
+      </div>
+      <div class="card" id="pr-members-panel" style="margin-top:20px;">
+        <h3>👥 أعضاء الفريق</h3><div class="empty-state">اضغط على الفريق لعرض الأعضاء</div>
+      </div>`;
+
+    const showTeam=(team)=>{
+      const tm=members.filter(m=>m.team===team);
+      const panel=document.getElementById('pr-members-panel');
+      panel.innerHTML=`<h3>👥 أعضاء ${esc(team)}</h3><div class="member-grid">${tm.map(m=>{
+        const ml=leads.filter(x=>x.responsiblePerson===m.name);
+        const md=dataRows.filter(x=>x.memberId===m.name);
+        const ms=subs.filter(x=>x.responsiblePerson===m.name);
+        return `<div class="member-card" data-member="${esc(m.name)}">
+          <div class="member-name">${esc(m.name)}</div><div class="member-role">${esc(ROLE_LABELS[m.department]||m.department||'عضو فريق')}</div>
+          <div class="member-stats"><div class="member-stat"><b>${ml.filter(x=>x.type==='مهتم').length}</b><span>مهتمون</span></div>
+          <div class="member-stat"><b>${ml.filter(x=>x.type==='مندوب').length}</b><span>مندوبون</span></div>
+          <div class="member-stat"><b>${ms.length}</b><span>اشتراكات</span></div></div>
+        </div>`;
+      }).join('')||'<div class="empty-state">لا يوجد أعضاء</div>'}</div>`;
+      panel.querySelectorAll('[data-member]').forEach(c=>c.addEventListener('click',()=>showMember(c.dataset.member)));
+    };
+    const showMember=(name)=>{
+      const m=members.find(x=>x.name===name);
+      const ml=leads.filter(x=>x.responsiblePerson===name);
+      const md=dataRows.filter(x=>x.memberId===name);
+      const ms=subs.filter(x=>x.responsiblePerson===name);
+      const panel=document.getElementById('pr-members-panel');
+      panel.innerHTML=`<button class="icon-btn" id="back-members">→ رجوع للأعضاء</button>
+        <div class="card" style="margin-top:10px"><h3>👤 ${esc(name)}</h3>
+          <div class="detail-grid">
+            <div class="detail-item"><div class="k">الفريق</div><div class="v">${esc(m?.team||'—')}</div></div>
+            <div class="detail-item"><div class="k">الهاتف</div><div class="v">${esc(m?.phone||'—')}</div></div>
+            <div class="detail-item"><div class="k">المهتمون</div><div class="v">${ml.filter(x=>x.type==='مهتم').length}</div></div>
+            <div class="detail-item"><div class="k">المندوبون</div><div class="v">${ml.filter(x=>x.type==='مندوب').length}</div></div>
+            <div class="detail-item"><div class="k">الاشتراكات</div><div class="v">${ms.length}</div></div>
+            <div class="detail-item"><div class="k">الداتا / الأرقام / اللينكات</div><div class="v">${md.length}</div></div>
+          </div>
+        </div>
+        <div class="card"><div class="page-head"><h3>🎯 مهتمون ومندوبون</h3><button class="btn-primary btn-gold" id="add-member-lead" style="width:auto;padding:8px 15px;">+ إضافة</button></div>
+          ${ml.length?`<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>النوع</th><th>الهاتف</th><th>الحالة</th></tr></thead><tbody>${ml.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.type)}</td><td>${esc(x.phone)}</td><td>${esc(x.status)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state">لا توجد بيانات</div>'}
+        </div>
+        <div class="card"><div class="page-head"><h3>🔗 الداتا والأرقام واللينكات</h3><button class="btn-primary btn-gold" id="add-member-data" style="width:auto;padding:8px 15px;">+ إضافة</button></div>
+          ${md.length?md.map(x=>`<div class="link-box"><div><b>${esc(x.title)}</b>${x.phone?`<div style="font-size:12px;margin-top:3px">📞 ${esc(x.phone)}</div>`:''}<div style="font-size:12px;color:var(--muted)">${esc(x.data||x.notes||'')}</div></div>${x.link?`<a href="${esc(x.link)}" target="_blank" rel="noopener">فتح ↗</a>`:''}</div>`).join(''):'<div class="empty-state">لا توجد داتا</div>'}
+        </div>
+        <div class="card"><h3>💳 اشتراكات العضو</h3>
+          ${ms.length?`<div class="table-wrap"><table><thead><tr><th>العميل</th><th>التاريخ</th><th>الباقة</th><th>الحالة</th></tr></thead><tbody>${ms.map(x=>`<tr><td>${esc(x.customerName)}</td><td>${esc(x.subscriptionDate)}</td><td>${esc(x.packageType)}</td><td>${esc(x.subscriptionStatus)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state">لا توجد اشتراكات</div>'}
+        </div>`;
+      document.getElementById('back-members').addEventListener('click',()=>showTeam(m?.team||teamNames[0]||''));
+      document.getElementById('add-member-lead').addEventListener('click',()=>openForm('indoor_leads',null));
+      document.getElementById('add-member-data').addEventListener('click',()=>openForm('pr_member_data',null));
+    };
+    page.querySelectorAll('[data-team]').forEach(c=>c.addEventListener('click',()=>showTeam(c.dataset.team)));
+  }
+
+  async function renderAreas(page){
+    const companies = await getData('companies');
+    page.innerHTML = `
+      <div class="page-head"><h2>🗺️ مناطق وأحياء الإسكندرية</h2></div>
+      <div class="card"><div class="areas-grid">
+        ${ALEX_AREAS.map(a=>{
+          const cnt = companies.filter(c=>c.area===a).length;
+          return `<div class="area-chip"><div class="cnt">${cnt}</div><div class="nm">${esc(a)}</div></div>`;
+        }).join('')}
+      </div></div>`;
+  }
+
+  function num_(v){ const n = parseFloat(v); return isNaN(n)? 0 : n; }
+  function money_(v){ return num_(v).toLocaleString('ar-EG', {minimumFractionDigits:0, maximumFractionDigits:2}); }
+
+  async function renderLedger(page){
+    const entries = await getData('accounting');
+    const clients = [...new Set(entries.map(e=>e.clientName).filter(Boolean))].sort();
+    const sel = state.ledgerClient;
+
+    const header = `
+      <div class="page-head">
+        <h2>💰 كشف الحساب${sel? ' — '+esc(sel):''}</h2>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <select id="ledger-client-filter" style="padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;">
+            <option value="">كل العملاء</option>
+            ${clients.map(c=>`<option value="${esc(c)}" ${c===sel?'selected':''}>${esc(c)}</option>`).join('')}
+          </select>
+          <button class="btn-primary btn-gold" id="add-ledger-btn" style="width:auto;padding:10px 20px;">+ إضافة قيد</button>
+        </div>
+      </div>`;
+
+    if(!sel){
+      const rows = clients.map(c=>{
+        const list = entries.filter(e=>e.clientName===c);
+        const totalDebit = list.reduce((s,e)=>s+num_(e.debit),0);
+        const totalCredit = list.reduce((s,e)=>s+num_(e.credit),0);
+        const balance = totalDebit - totalCredit;
+        return {c, totalDebit, totalCredit, balance};
+      });
+      const grandDebit = rows.reduce((s,r)=>s+r.totalDebit,0);
+      const grandCredit = rows.reduce((s,r)=>s+r.totalCredit,0);
+      page.innerHTML = header + `
+        <div class="stat-grid">
+          <div class="stat-card"><div class="num">${money_(grandDebit)}</div><div class="lbl">إجمالي المدين (على العملاء)</div></div>
+          <div class="stat-card"><div class="num">${money_(grandCredit)}</div><div class="lbl">إجمالي الدائن (المحصّل)</div></div>
+          <div class="stat-card"><div class="num">${money_(grandDebit-grandCredit)}</div><div class="lbl">صافي المتبقي على العملاء</div></div>
+        </div>
+        <div class="card">
+          ${rows.length? `<div class="table-wrap"><table>
+            <thead><tr><th>العميل</th><th>إجمالي مدين</th><th>إجمالي دائن</th><th>الرصيد</th><th></th></tr></thead>
+            <tbody>${rows.map(r=>`<tr>
+              <td>${esc(r.c)}</td><td>${money_(r.totalDebit)}</td><td>${money_(r.totalCredit)}</td>
+              <td><span class="badge ${r.balance>0?'red':(r.balance<0?'blue':'green')}">${money_(r.balance)}</span></td>
+              <td><button class="icon-btn" data-open="${esc(r.c)}">عرض كشف الحساب ↗</button></td>
+            </tr>`).join('')}</tbody>
+          </table></div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد قيود بعد — ابدأ بإضافة قيد</div>`}
+        </div>`;
+      page.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click', ()=>{ state.ledgerClient=b.dataset.open; render(); }));
+    } else {
+      const list = entries.filter(e=>e.clientName===sel).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+      let running = 0;
+      const rowsHtml = list.map(e=>{
+        running += num_(e.debit) - num_(e.credit);
+        return `<tr>
+          <td>${esc(e.date)}</td><td>${esc(e.description)}</td><td>${esc(e.packageType)}</td>
+          <td>${e.debit? money_(e.debit):'—'}</td><td>${e.credit? money_(e.credit):'—'}</td>
+          <td><b>${money_(running)}</b></td>
+          <td style="white-space:nowrap;"><button class="icon-btn" data-edit="${e.id}">✏️</button><button class="icon-btn del" data-del="${e.id}">🗑️</button></td>
+        </tr>`;
+      }).join('');
+      const totalDebit = list.reduce((s,e)=>s+num_(e.debit),0);
+      const totalCredit = list.reduce((s,e)=>s+num_(e.credit),0);
+      page.innerHTML = header + `
+        <button class="icon-btn" id="back-to-clients" style="margin-bottom:14px;">→ رجوع لكل العملاء</button>
+        <div class="stat-grid">
+          <div class="stat-card"><div class="num">${money_(totalDebit)}</div><div class="lbl">إجمالي المدين</div></div>
+          <div class="stat-card"><div class="num">${money_(totalCredit)}</div><div class="lbl">إجمالي الدائن</div></div>
+          <div class="stat-card"><div class="num">${money_(totalDebit-totalCredit)}</div><div class="lbl">الرصيد النهائي</div></div>
+        </div>
+        <div class="card">
+          ${list.length? `<div class="table-wrap"><table>
+            <thead><tr><th>التاريخ</th><th>البيان</th><th>نوع الباقة</th><th>مدين</th><th>دائن</th><th>الرصيد</th><th></th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table></div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد قيود لهذا العميل بعد</div>`}
+        </div>`;
+      document.getElementById('back-to-clients').addEventListener('click', ()=>{ state.ledgerClient=null; render(); });
+      page.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click', ()=>openLedgerForm(b.dataset.edit)));
+      page.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', async ()=>{
+        if(!confirm('تأكيد الحذف؟')) return;
+        await apiDelete('accounting', b.dataset.del);
+        render();
+      }));
+    }
+    document.getElementById('ledger-client-filter').addEventListener('change', e=>{ state.ledgerClient = e.target.value || null; render(); });
+    document.getElementById('add-ledger-btn').addEventListener('click', ()=>openLedgerForm(null, sel));
+  }
+
+  async function openLedgerForm(id, presetClient){
+    const list = await getData('accounting');
+    const row = id? list.find(r=>r.id===id) : (presetClient? {clientName:presetClient}: {});
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal">
+      <h3>${id? 'تعديل قيد':'إضافة قيد جديد'} — كشف الحساب</h3>
+      <form id="ledger-form"><div class="form-grid">
+        ${LEDGER_FIELDS.map(f=>renderField(f, row, {})).join('')}
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+        <button type="submit" class="btn-primary btn-gold">حفظ</button>
+      </div></form>
+    </div>`;
+    document.body.appendChild(modalBg);
+
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+    modalBg.querySelector('#ledger-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const guard = submitGuard(e.target); if(!guard.ok) return;
+      try{
+        const isNew = !row.id;
+        const newRow = row.id? {...row} : {id: uid()};
+        LEDGER_FIELDS.forEach(f=>{ newRow[f.key] = modalBg.querySelector(`[name="${f.key}"]`).value; });
+        if(isNew) await apiAdd('accounting', newRow); else await apiUpdate('accounting', newRow);
+        state.ledgerClient = newRow.clientName;
+        modalBg.remove();
+        render();
+      }catch(err){ console.error(err); alert('تعذر حفظ القيد'); guard.release(); }
+    });
+  }
+
+  const CHART_COLORS = ['#b3261e','#f2b705','#1a7a4c','#25508f','#a5690a','#6b7280',
+    '#8b5cf6','#0891b2','#dc2626','#059669','#d97706','#0284c7'];
+
+  function moduleDimensionOptions(mod){
+    const opts = [];
+    mod.fields.forEach(f=>{
+      if(f.type==='select' || f.type==='dynamicSelect'){
+        opts.push({key:f.key, label:f.label});
+        if(f.type==='dynamicSelect' && f.ref==='employees'){
+          opts.push({key:f.key+'__team', label:f.label+' — الفريق'});
+        }
+      }
+    });
+    return opts;
+  }
+  function moduleMetricFields(mod){ return mod.fields.filter(f=>f.type==='number'); }
+  function moduleFilterFields(mod){ return mod.fields.filter(f=>f.type==='select' || f.type==='dynamicSelect'); }
+
+  async function employeeTeamMap(){
+    const emps = await getData('employees');
+    const map = {};
+    emps.forEach(e=>{ if(e.name) map[e.name] = e.team || 'بدون فريق'; });
+    return map;
+  }
+
+  function dimValue(row, dimKey, teamMap){
+    if(dimKey.endsWith('__team')){
+      const base = dimKey.slice(0, -('__team'.length));
+      const person = row[base];
+      return (person && teamMap[person]) || 'بدون فريق';
+    }
+    return row[dimKey] || 'غير محدد';
+  }
+
+  function groupAndAggregate(rows, dimKey, metric, metricField, teamMap){
+    if(!dimKey){
+      const total = metric==='sum'? rows.reduce((s,r)=>s+num_(r[metricField]),0) : rows.length;
+      return [{label:'الإجمالي', value: total}];
+    }
+    const map = {};
+    rows.forEach(r=>{
+      const g = dimValue(r, dimKey, teamMap);
+      if(!(g in map)) map[g]=0;
+      map[g] += (metric==='sum') ? num_(r[metricField]) : 1;
+    });
+    return Object.entries(map).map(([k,v])=>({label:k, value:v})).sort((a,b)=>b.value-a.value);
+  }
+
+  function renderPieWidget(entries){
+    const total = entries.reduce((s,e)=>s+e.value,0) || 1;
+    let acc = 0;
+    const stops = entries.map((e,i)=>{
+      const start = acc/total*360; acc += e.value; const end = acc/total*360;
+      return `${CHART_COLORS[i % CHART_COLORS.length]} ${start}deg ${end}deg`;
+    }).join(', ');
+    const legend = entries.map((e,i)=>{
+      const pct = Math.round(e.value/total*1000)/10;
+      return `<div class="legend-row"><span class="dot" style="background:${CHART_COLORS[i % CHART_COLORS.length]}"></span>
+        <span class="legend-lbl">${esc(e.label)}</span><span class="legend-val">${e.value} (${pct}%)</span></div>`;
+    }).join('');
+    return `<div class="pie-wrap">
+      <div class="pie-donut-wrap"><div class="pie-donut" style="background:conic-gradient(${entries.length?stops:'#eee 0deg 360deg'});"></div><div class="pie-hole"></div></div>
+      <div class="pie-legend">${legend || '<div class="empty-mini">لا توجد بيانات</div>'}</div>
+    </div>`;
+  }
+
+  function renderBarWidget(entries){
+    if(!entries.length) return '<div class="empty-mini">لا توجد بيانات</div>';
+    const max = Math.max(1, ...entries.map(e=>e.value));
+    return `<div class="bar-wrap">${entries.map((e,i)=>{
+      const pct = Math.round(e.value/max*100);
+      return `<div class="bar-row"><div class="bar-lbl">${esc(e.label)}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${CHART_COLORS[i % CHART_COLORS.length]};"></div></div>
+        <span class="bar-val">${e.value}</span></div>`;
+    }).join('')}</div>`;
+  }
+
+  function renderTableWidget(entries){
+    return `<div class="table-wrap"><table><thead><tr><th>الفئة</th><th>القيمة</th></tr></thead>
+      <tbody>${entries.length? entries.map(e=>`<tr><td>${esc(e.label)}</td><td><b>${e.value}</b></td></tr>`).join('') :
+      `<tr><td colspan="2" style="text-align:center;color:var(--muted);">لا توجد بيانات</td></tr>`}</tbody></table></div>`;
+  }
+
+  function renderNumberWidget(entries){
+    const total = entries.reduce((s,e)=>s+e.value,0);
+    return `<div class="stat-number">${total.toLocaleString('ar-EG')}</div>`;
+  }
+
+  function renderWidgetBody(chartType, entries){
+    if(chartType==='pie') return renderPieWidget(entries);
+    if(chartType==='bar') return renderBarWidget(entries);
+    if(chartType==='table') return renderTableWidget(entries);
+    return renderNumberWidget(entries);
+  }
+
+  async function renderAnalytics(page, mods){
+    const accessibleKeys = new Set(mods.map(([k])=>k));
+    await getDataMany(['dashboards','widgets','employees']);
+    const allBoards = await getData('dashboards');
+    const myBoards = allBoards.filter(b=> accessibleKeys.has(b.sourceModule));
+    if(!state.analyticsBoard || !myBoards.find(b=>b.id===state.analyticsBoard)){
+      state.analyticsBoard = myBoards.length? myBoards[0].id : null;
+    }
+    const board = myBoards.find(b=>b.id===state.analyticsBoard) || null;
+    state.analyticsFilters = state.analyticsFilters || {};
+
+    let bodyHtml, mod, widgets;
+    if(!board){
+      bodyHtml = `<div class="card"><div class="empty-state"><div class="big">📊</div>لا توجد لوحات تحليل بعد — اضغط "+ لوحة جديدة" لبدء بناء التحليلات الخاصة بقسمك</div></div>`;
+    } else {
+      mod = MODULES[board.sourceModule];
+      const rawData = await getData(board.sourceModule);
+      const teamMap = await employeeTeamMap();
+      const filterFields = moduleFilterFields(mod);
+      const filtersHtml = filterFields.map(f=>{
+        const options = f.type==='select'? f.options : [...new Set(rawData.map(r=>r[f.key]).filter(Boolean))];
+        const cur = state.analyticsFilters[f.key] || '';
+        return `<select class="analytics-filter" data-field="${f.key}">
+          <option value="">${esc(f.label)}: الكل</option>
+          ${options.map(o=>`<option value="${esc(o)}" ${o===cur?'selected':''}>${esc(o)}</option>`).join('')}
+        </select>`;
+      }).join('');
+
+      const filteredData = rawData.filter(r=> filterFields.every(f=>{
+        const v = state.analyticsFilters[f.key]; return !v || r[f.key]===v;
+      }));
+
+      widgets = (await getData('widgets')).filter(w=>w.dashboardId===board.id);
+      const widgetCards = widgets.map(w=>{
+        const entries = groupAndAggregate(filteredData, w.groupBy, w.metric, w.metricField, teamMap);
+        return `<div class="widget-card">
+          <div class="widget-head"><h4>${esc(w.title)}</h4>
+            <div><button class="icon-btn" data-editw="${w.id}">✏️</button><button class="icon-btn del" data-delw="${w.id}">🗑️</button></div>
+          </div>
+          ${renderWidgetBody(w.chartType, entries)}
+        </div>`;
+      }).join('');
+
+      bodyHtml = `
+        <div class="page-head" style="margin-bottom:14px;">
+          <div class="analytics-filterbar">${filtersHtml || '<span style="color:var(--muted);font-size:13px;">لا توجد فلاتر متاحة لهذا المصدر</span>'}</div>
+          <div style="display:flex;gap:8px;">
+            ${filterFields.length? `<button class="btn-secondary" id="clear-filters" style="width:auto;padding:9px 16px;">✖ مسح الفلاتر</button>`:''}
+            <button class="icon-btn del" id="del-board-btn">🗑️ حذف اللوحة</button>
+          </div>
+        </div>
+        <div class="widgets-grid">
+          ${widgetCards}
+          <button class="widget-card add-widget-card" id="add-widget-btn">➕<br/>إضافة عنصر تحليل</button>
+        </div>`;
+    }
+
+    const boardTabs = myBoards.map(b=>`<button class="board-tab ${b.id===state.analyticsBoard?'active':''}" data-board="${b.id}">${MODULES[b.sourceModule]? MODULES[b.sourceModule].icon:'📊'} ${esc(b.name)}</button>`).join('');
+
+    page.innerHTML = `
+      <div class="page-head">
+        <h2>📊 تحليل البيانات</h2>
+        <button class="btn-primary btn-gold" id="new-board-btn" style="width:auto;padding:10px 20px;">+ لوحة جديدة</button>
+      </div>
+      ${myBoards.length? `<div class="board-tabs">${boardTabs}</div>` : ''}
+      ${bodyHtml}`;
+
+    document.getElementById('new-board-btn').addEventListener('click', ()=>openBoardForm(mods));
+    page.querySelectorAll('[data-board]').forEach(b=>b.addEventListener('click', ()=>{
+      state.analyticsBoard=b.dataset.board; state.analyticsFilters={}; render();
+    }));
+    if(board){
+      page.querySelectorAll('.analytics-filter').forEach(sel=>sel.addEventListener('change', ()=>{
+        state.analyticsFilters[sel.dataset.field] = sel.value; render();
+      }));
+      const clearBtn = document.getElementById('clear-filters');
+      if(clearBtn) clearBtn.addEventListener('click', ()=>{ state.analyticsFilters={}; render(); });
+      document.getElementById('del-board-btn').addEventListener('click', async ()=>{
+        if(!confirm('حذف اللوحة وكل عناصر التحليل بداخلها؟')) return;
+        const ws = (await getData('widgets')).filter(w=>w.dashboardId===board.id);
+        await apiDeleteMany('widgets', ws.map(w=>w.id));
+        await apiDelete('dashboards', board.id);
+        state.analyticsBoard = null;
+        render();
+      });
+      document.getElementById('add-widget-btn').addEventListener('click', ()=>openWidgetForm(board, mod, null));
+      page.querySelectorAll('[data-editw]').forEach(b=>b.addEventListener('click', ()=>{
+        const w = widgets.find(x=>x.id===b.dataset.editw);
+        openWidgetForm(board, mod, w);
+      }));
+      page.querySelectorAll('[data-delw]').forEach(b=>b.addEventListener('click', async ()=>{
+        if(!confirm('حذف عنصر التحليل؟')) return;
+        await apiDelete('widgets', b.dataset.delw);
+        render();
+      }));
+    }
+  }
+
+  function openBoardForm(mods){
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal">
+      <h3>إنشاء لوحة تحليل جديدة</h3>
+      <form id="board-form"><div class="form-grid">
+        <div class="field full"><label>اسم اللوحة</label><input name="name" type="text" required placeholder="مثال: تحليل زيارات العلاقات العامة"/></div>
+        <div class="field full"><label>مصدر البيانات (القسم)</label>
+          <select name="sourceModule" required>
+            <option value="">اختر...</option>
+            ${mods.map(([k,m])=>`<option value="${k}">${m.icon} ${esc(m.title)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+        <button type="submit" class="btn-primary btn-gold">إنشاء</button>
+      </div></form>
+    </div>`;
+    document.body.appendChild(modalBg);
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+    modalBg.querySelector('#board-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const guard = submitGuard(e.target); if(!guard.ok) return;
+      try{
+        const fd = new FormData(e.target);
+        const rec = {id: uid(), name: fd.get('name'), sourceModule: fd.get('sourceModule'),
+          department: state.user.role, createdBy: state.user.name};
+        await apiAdd('dashboards', rec);
+        state.analyticsBoard = rec.id;
+        state.analyticsFilters = {};
+        modalBg.remove();
+        render();
+      }catch(err){ console.error(err); alert('تعذر إنشاء اللوحة'); guard.release(); }
+    });
+  }
+
+  function openWidgetForm(board, mod, widget){
+    const dims = moduleDimensionOptions(mod);
+    const metricFields = moduleMetricFields(mod);
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal">
+      <h3>${widget? 'تعديل عنصر التحليل':'إضافة عنصر تحليل جديد'}</h3>
+      <form id="widget-form"><div class="form-grid">
+        <div class="field full"><label>عنوان العنصر</label><input name="title" type="text" required value="${widget?esc(widget.title):''}"/></div>
+        <div class="field"><label>نوع العرض</label>
+          <select name="chartType">
+            <option value="pie" ${widget&&widget.chartType==='pie'?'selected':''}>دائري (Pie)</option>
+            <option value="bar" ${widget&&widget.chartType==='bar'?'selected':''}>أعمدة (Bar)</option>
+            <option value="table" ${widget&&widget.chartType==='table'?'selected':''}>جدول</option>
+            <option value="number" ${widget&&widget.chartType==='number'?'selected':''}>رقم إجمالي</option>
+          </select>
+        </div>
+        <div class="field"><label>التقسيم حسب</label>
+          <select name="groupBy">
+            <option value="">بدون تقسيم (إجمالي فقط)</option>
+            ${dims.map(d=>`<option value="${d.key}" ${widget&&widget.groupBy===d.key?'selected':''}>${esc(d.label)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>المعدل (Metric)</label>
+          <select name="metric" id="metric-select">
+            <option value="count" ${!widget||widget.metric==='count'?'selected':''}>عدد السجلات</option>
+            ${metricFields.length? `<option value="sum" ${widget&&widget.metric==='sum'?'selected':''}>مجموع حقل رقمي</option>` : ''}
+          </select>
+        </div>
+        <div class="field" id="metric-field-wrap" style="${(!widget||widget.metric!=='sum')?'display:none;':''}">
+          <label>الحقل الرقمي</label>
+          <select name="metricField">
+            ${metricFields.map(f=>`<option value="${f.key}" ${widget&&widget.metricField===f.key?'selected':''}>${esc(f.label)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+        <button type="submit" class="btn-primary btn-gold">حفظ</button>
+      </div></form>
+    </div>`;
+    document.body.appendChild(modalBg);
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+    modalBg.querySelector('#metric-select').addEventListener('change', e=>{
+      modalBg.querySelector('#metric-field-wrap').style.display = e.target.value==='sum'? '' : 'none';
+    });
+    modalBg.querySelector('#widget-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const guard = submitGuard(e.target); if(!guard.ok) return;
+      try{
+        const fd = new FormData(e.target);
+        const rec = {
+          id: widget? widget.id : uid(),
+          dashboardId: board.id,
+          title: fd.get('title'),
+          chartType: fd.get('chartType'),
+          groupBy: fd.get('groupBy') || '',
+          metric: fd.get('metric'),
+          metricField: fd.get('metricField') || '',
+        };
+        if(widget) await apiUpdate('widgets', rec); else await apiAdd('widgets', rec);
+        modalBg.remove();
+        render();
+      }catch(err){ console.error(err); alert('تعذر حفظ عنصر التحليل'); guard.release(); }
+    });
+  }
+
+  let accomMigrationChecked = false;
+  async function ensureAccommodationMigration(){
+    if(accomMigrationChecked) return;
+    accomMigrationChecked = true;
+    try{
+      const flag = await getSetting('accom_migration_v2_done');
+      if(flag==='yes') return;
+      await getDataMany(['accom_hotels','trip_hotels','accom_rooms','accom_guests']);
+      const hotels = await getData('accom_hotels');
+      const tripHotels = await getData('trip_hotels');
+      const rooms = await getData('accom_rooms');
+      const guests = await getData('accom_guests');
+      const newLinks = [];
+      const guestUpdates = [];
+      hotels.forEach(h=>{
+        const legacyTripId = h.tripId;
+        if(!legacyTripId) return;
+        const exists = tripHotels.some(th=>String(th.tripId)===String(legacyTripId) && String(th.hotelId)===String(h.id));
+        if(!exists) newLinks.push({id:uid(), tripId:legacyTripId, hotelId:h.id, notes:''});
+        const hotelRoomIds = rooms.filter(r=>r.hotelId===h.id).map(r=>r.id);
+        guests.forEach(g=>{
+          if(hotelRoomIds.includes(g.roomId) && !g.tripId){
+            guestUpdates.push({...g, tripId: legacyTripId});
+          }
+        });
+      });
+      if(newLinks.length) await apiAddMany('trip_hotels', newLinks);
+      if(guestUpdates.length) await apiAddMany('accom_guests', guestUpdates);
+      await setSetting('accom_migration_v2_done','yes');
+    }catch(e){ console.error('accommodation migration error', e); }
+  }
+
+  function crumbsBar(items){
+    return `<div class="crumbs">${items.map((it,i)=>{
+      const isLast = i===items.length-1;
+      const sep = i>0? `<span class="sep">›</span>` : '';
+      return sep + (isLast? `<span>${esc(it.label)}</span>` : `<button data-crumb="${i}">${esc(it.label)}</button>`);
+    }).join('')}</div>`;
+  }
+  function bindCrumbs(page, handlers){
+    page.querySelectorAll('[data-crumb]').forEach(b=>b.addEventListener('click', ()=>handlers[Number(b.dataset.crumb)]()));
+  }
+
+  async function renderAccommodationSection(page){
+    await ensureAccommodationMigration();
+    state.accomSecView = state.accomSecView || 'hotels';
+    if(state.accomSecView==='rooms') return renderAccomSectionRooms(page);
+    return renderAccomSectionHotels(page);
+  }
+
+  async function renderAccomSectionHotels(page){
+    await getDataMany(['accom_hotels','accom_rooms']);
+    const hotels = (await getData('accom_hotels')).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+    const rooms = await getData('accom_rooms');
+    page.innerHTML = `
+      <div class="page-head"><h2>🏨 التسكين — الفنادق</h2>
+        <button class="btn-primary btn-gold" id="add-hotel-standalone-btn" style="width:auto;padding:10px 20px;">+ إضافة فندق</button>
+      </div>
+      <div class="assumption-note">هذا القسم مستقل تمامًا عن الرحلات: إضافة أو تعديل أو حذف أي رحلة من قسم "الرحلات" لن يؤثر على الفنادق أو الغرف هنا إطلاقًا. لربط فندق موجود برحلة معينة استخدم قسم "الرحلات".</div>
+      <div class="card">
+        ${hotels.length? `<div class="areas-grid">${hotels.map(h=>{
+          const roomsCnt = rooms.filter(r=>r.hotelId===h.id).length;
+          return `<div class="area-chip click-card" data-hotel="${h.id}">
+            <div class="cnt">🏨</div><div class="nm">${esc(h.name)}</div>
+            <div class="nm" style="color:var(--muted);">${esc(h.location||'')}</div>
+            <div class="nm" style="color:var(--navy-700);font-weight:700;">${roomsCnt} غرفة</div>
+            <button class="icon-btn" data-edithotel="${h.id}" style="margin-top:6px;">✏️ تعديل</button>
+            <button class="icon-btn del" data-delhotelstd="${h.id}" style="margin-top:6px;">🗑️ حذف</button>
+          </div>`;
+        }).join('')}</div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد فنادق بعد — ابدأ بالإضافة</div>`}
+      </div>`;
+    document.getElementById('add-hotel-standalone-btn').addEventListener('click', ()=>openStandaloneHotelForm(null));
+    page.querySelectorAll('[data-hotel]').forEach(el=>el.addEventListener('click', (e)=>{
+      if(e.target.closest('[data-edithotel]') || e.target.closest('[data-delhotelstd]')) return;
+      state.accomSecHotelId = el.dataset.hotel; state.accomSecView='rooms'; render();
+    }));
+    page.querySelectorAll('[data-edithotel]').forEach(b=>b.addEventListener('click', (e)=>{
+      e.stopPropagation(); openStandaloneHotelForm(b.dataset.edithotel);
+    }));
+    page.querySelectorAll('[data-delhotelstd]').forEach(b=>b.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!confirm('حذف الفندق سيحذف كل غرفه والنزلاء المسجلين فيه في كل الرحلات، وسيُلغى ربطه من أي رحلة. هل أنت متأكد؟')) return;
+      const hid = b.dataset.delhotelstd;
+      const roomsOfHotel = (await getData('accom_rooms')).filter(r=>r.hotelId===hid);
+      const guestsOfRooms = (await getData('accom_guests')).filter(g=>roomsOfHotel.some(r=>r.id===g.roomId));
+      const links = (await getData('trip_hotels')).filter(t=>t.hotelId===hid);
+      await apiDeleteMany('accom_guests', guestsOfRooms.map(g=>g.id));
+      await apiDeleteMany('accom_rooms', roomsOfHotel.map(r=>r.id));
+      await apiDeleteMany('trip_hotels', links.map(l=>l.id));
+      await apiDelete('accom_hotels', hid);
+      render();
+    }));
+  }
+
+  function openStandaloneHotelForm(id){
+    (async ()=>{
+      const row = id? (await getData('accom_hotels')).find(h=>h.id===id) : {};
+      const modalBg = document.createElement('div');
+      modalBg.className = 'modal-bg';
+      modalBg.innerHTML = `<div class="modal"><h3>${id?'تعديل فندق':'إضافة فندق'}</h3>
+        <form id="hotel-standalone-form"><div class="form-grid">
+          <div class="field full"><label>اسم الفندق</label><input name="name" required value="${esc(row?.name||'')}"/></div>
+          <div class="field full"><label>مكان الفندق</label><input name="location" placeholder="مثال: مكة - العزيزية" value="${esc(row?.location||'')}"/></div>
+          <div class="field full"><label>ملاحظات</label><textarea name="notes" rows="2">${esc(row?.notes||'')}</textarea></div>
+        </div>
+        <div class="modal-actions"><button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+          <button type="submit" class="btn-primary btn-gold">حفظ</button></div></form></div>`;
+      document.body.appendChild(modalBg);
+      modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+      modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+      modalBg.querySelector('#hotel-standalone-form').addEventListener('submit', async e=>{
+        e.preventDefault();
+        const guard = submitGuard(e.target); if(!guard.ok) return;
+        try{
+          const fd = new FormData(e.target);
+          const rec = {id: id||uid(), name:fd.get('name'), location:fd.get('location'), notes:fd.get('notes')};
+          if(id) await apiUpdate('accom_hotels', rec); else await apiAdd('accom_hotels', rec);
+          modalBg.remove(); render();
+        }catch(err){ console.error(err); alert('تعذر الحفظ'); guard.release(); }
+      });
+    })();
+  }
+
+  async function renderAccomSectionRooms(page){
+    await getDataMany(['accom_hotels','accom_rooms','accom_guests','trips']);
+    const hotels = await getData('accom_hotels');
+    const hotel = hotels.find(h=>h.id===state.accomSecHotelId);
+    if(!hotel){ state.accomSecView='hotels'; return render(); }
+    const rooms = (await getData('accom_rooms')).filter(r=>r.hotelId===hotel.id);
+    const guests = await getData('accom_guests');
+    const trips = await getData('trips');
+    page.innerHTML = `
+      <div class="page-head"><h2>🛏️ غرف فندق ${esc(hotel.name)}</h2>
+        <button class="btn-primary btn-gold" id="add-room-std-btn" style="width:auto;padding:10px 20px;">+ إضافة غرفة</button>
+      </div>
+      ${crumbsBar([{label:'الفنادق'},{label:hotel.name}])}
+      <div class="card">
+        ${rooms.length? rooms.map(r=>{
+          const roomGuests = guests.filter(g=>g.roomId===r.id);
+          const cap = num_(r.capacity)||1;
+          const cnt = roomGuests.length;
+          const over = cnt>cap;
+          const guestsTableHtml = roomGuests.length? `<div class="table-wrap"><table>
+              <thead><tr><th>الاسم</th><th>الرقم القومي</th><th>رقم الجواز</th><th>الهاتف</th><th>حالة الطيران</th><th>الرحلة</th></tr></thead>
+              <tbody>${roomGuests.map(g=>{
+                const t = trips.find(tr=>tr.id===g.tripId);
+                const tripLbl = t? esc(t.label||t.date||'') : '—';
+                return `<tr>
+                  <td>${esc(g.name||'بدون اسم')}</td>
+                  <td>${esc(g.nationalId||'—')}</td>
+                  <td>${esc(g.passportNumber||'—')}</td>
+                  <td>${esc(g.phone||'—')}</td>
+                  <td>${fieldDisplay({key:'flightStatus'}, g.flightStatus)}</td>
+                  <td>${tripLbl}</td>
+                </tr>`;
+              }).join('')}</tbody>
+            </table></div>` : `<div class="empty-state" style="padding:16px;"><div class="big">📭</div>لا يوجد نزلاء مسجلين في هذه الغرفة</div>`;
+          return `<div class="card" style="margin-bottom:16px;box-shadow:none;">
+            <div class="page-head" style="margin-bottom:12px;">
+              <h3 style="display:flex;align-items:center;gap:8px;">🛏️ غرفة ${esc(r.roomNumber||'')} ${roomTypeBadge(r.roomType)}
+                <span class="badge ${over?'red':'green'}">${cnt} / ${cap}</span></h3>
+              <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+                <span style="font-size:12.5px;color:var(--muted);">الإتاحة: ${esc(r.availableFrom||'—')} → ${esc(r.availableTo||'—')}</span>
+                <button class="icon-btn" data-editroomstd="${r.id}">✏️ تعديل</button>
+                <button class="icon-btn del" data-delroomstd="${r.id}">🗑️ حذف</button>
+              </div>
+            </div>
+            ${guestsTableHtml}
+          </div>`;
+        }).join('') : `<div class="empty-state"><div class="big">📭</div>لا توجد غرف مضافة لهذا الفندق</div>`}
+      </div>`;
+    document.getElementById('add-room-std-btn').addEventListener('click', ()=>openStandaloneRoomForm(hotel.id, null, ()=>render()));
+    bindCrumbs(page, [ ()=>{ state.accomSecView='hotels'; render(); }, ()=>{} ]);
+    page.querySelectorAll('[data-editroomstd]').forEach(b=>b.addEventListener('click', ()=>openStandaloneRoomForm(hotel.id, b.dataset.editroomstd, ()=>render())));
+    page.querySelectorAll('[data-delroomstd]').forEach(b=>b.addEventListener('click', async ()=>{
+      if(!confirm('حذف الغرفة سيحذف كل النزلاء المسجلين فيها في كل الرحلات. متأكد؟')) return;
+      const gs = (await getData('accom_guests')).filter(g=>g.roomId===b.dataset.delroomstd);
+      await apiDeleteMany('accom_guests', gs.map(g=>g.id));
+      await apiDelete('accom_rooms', b.dataset.delroomstd);
+      render();
+    }));
+  }
+
+  function openStandaloneRoomForm(hotelId, id, afterSave){
+    (async ()=>{
+      const row = id? (await getData('accom_rooms')).find(r=>r.id===id) : {};
+      const modalBg = document.createElement('div');
+      modalBg.className = 'modal-bg';
+      modalBg.innerHTML = `<div class="modal"><h3>${id?'تعديل غرفة':'إضافة غرفة'}</h3>
+        <form id="room-standalone-form"><div class="form-grid">
+          <div class="field"><label>رقم / اسم الغرفة</label><input name="roomNumber" required value="${esc(row?.roomNumber||'')}"/></div>
+          <div class="field"><label>عدد الأفراد (السعة / السراير)</label><input name="capacity" type="number" min="1" value="${esc(row?.capacity||2)}" required/></div>
+          <div class="field"><label>نوع الغرفة</label>
+            <select name="roomType">
+              <option value="">اختر...</option>
+              ${ROOM_TYPES.map(t=>`<option value="${esc(t)}" ${row?.roomType===t?'selected':''}>${esc(t)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field"><label>تاريخ الإتاحة من</label><input name="availableFrom" type="date" value="${esc(row?.availableFrom||'')}"/></div>
+          <div class="field"><label>تاريخ الإتاحة إلى</label><input name="availableTo" type="date" value="${esc(row?.availableTo||'')}"/></div>
+        </div>
+        <div class="modal-actions"><button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+          <button type="submit" class="btn-primary btn-gold">حفظ</button></div></form></div>`;
+      document.body.appendChild(modalBg);
+      modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+      modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+      modalBg.querySelector('#room-standalone-form').addEventListener('submit', async e=>{
+        e.preventDefault();
+        const guard = submitGuard(e.target); if(!guard.ok) return;
+        try{
+          const fd = new FormData(e.target);
+          const rec = {id: id||uid(), hotelId, roomNumber:fd.get('roomNumber'), capacity:fd.get('capacity'),
+            roomType:fd.get('roomType'), availableFrom:fd.get('availableFrom'), availableTo:fd.get('availableTo')};
+          if(id) await apiUpdate('accom_rooms', rec); else await apiAdd('accom_rooms', rec);
+          modalBg.remove(); afterSave && afterSave();
+        }catch(err){ console.error(err); alert('تعذر الحفظ'); guard.release(); }
+      });
+    })();
+  }
+
+  async function renderTripsHub(page){
+    await ensureAccommodationMigration();
+    state.tripsHubView = state.tripsHubView || 'trips';
+    if(state.tripsHubView==='hotels') return renderTripHub_HotelsOfTrip(page);
+    if(state.tripsHubView==='rooms') return renderTripHub_RoomsOfHotel(page);
+    if(state.tripsHubView==='guests') return renderTripHub_GuestsOfRoom(page);
+    return renderTripHub_TripsList(page);
+  }
+
+  async function renderTripHub_TripsList(page){
+    await getDataMany(['trips','trip_hotels']);
+    const trips = (await getData('trips')).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    const links = await getData('trip_hotels');
+    page.innerHTML = `
+      <div class="page-head"><h2>🧳 الرحلات</h2>
+        <button class="btn-primary btn-gold" id="add-trip-btn" style="width:auto;padding:10px 20px;">+ إضافة رحلة</button>
+      </div>
+      <div class="assumption-note">حذف رحلة من هنا يحذف الرحلة فقط وربطها بالفنادق ونزلائها في هذه الرحلة تحديدًا — الفنادق والغرف نفسها تبقى كما هي في قسم "التسكين" ويمكن استخدامها في رحلات أخرى.</div>
+      <div class="card">
+        ${trips.length? `<div class="areas-grid">${trips.map(t=>{
+          const hCnt = links.filter(l=>l.tripId===t.id).length;
+          return `<div class="area-chip click-card" data-trip="${t.id}">
+            <div class="cnt">🧳</div><div class="nm">${esc(t.label||'رحلة')}</div>
+            <div class="nm" style="color:var(--navy-700);font-weight:700;">${esc(t.date||'')}</div>
+            <div class="nm" style="color:var(--muted);font-size:11px;">${hCnt} فندق مرتبط</div>
+            <button class="icon-btn" data-edittrip="${t.id}" style="margin-top:6px;">✏️ تعديل</button>
+            <button class="icon-btn del" data-deltrip="${t.id}" style="margin-top:6px;">🗑️ حذف الرحلة فقط</button>
+          </div>`;
+        }).join('')}</div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد رحلات بعد — ابدأ بالإضافة</div>`}
+      </div>`;
+    document.getElementById('add-trip-btn').addEventListener('click', ()=>openTripFormNew(null));
+    page.querySelectorAll('[data-trip]').forEach(el=>el.addEventListener('click', (e)=>{
+      if(e.target.closest('[data-edittrip]') || e.target.closest('[data-deltrip]')) return;
+      state.tripsHubTripId = el.dataset.trip; state.tripsHubView='hotels'; render();
+    }));
+    page.querySelectorAll('[data-edittrip]').forEach(b=>b.addEventListener('click', (e)=>{ e.stopPropagation(); openTripFormNew(b.dataset.edittrip); }));
+    page.querySelectorAll('[data-deltrip]').forEach(b=>b.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!confirm('حذف الرحلة فقط (الفنادق والغرف ستبقى بدون أي تغيير)؟')) return;
+      const tid = b.dataset.deltrip;
+      const linksOfTrip = (await getData('trip_hotels')).filter(l=>l.tripId===tid);
+      const guestsOfTrip = (await getData('accom_guests')).filter(g=>g.tripId===tid);
+      await apiDeleteMany('accom_guests', guestsOfTrip.map(g=>g.id));
+      await apiDeleteMany('trip_hotels', linksOfTrip.map(l=>l.id));
+      await apiDelete('trips', tid);
+      render();
+    }));
+  }
+
+  function openTripFormNew(id){
+    (async ()=>{
+      const row = id? (await getData('trips')).find(t=>t.id===id) : {};
+      const modalBg = document.createElement('div');
+      modalBg.className = 'modal-bg';
+      modalBg.innerHTML = `<div class="modal"><h3>${id?'تعديل رحلة':'إضافة رحلة جديدة'}</h3>
+        <form id="trip-form-new"><div class="form-grid">
+          <div class="field"><label>تاريخ الرحلة</label><input name="date" type="date" required value="${esc(row?.date||'')}"/></div>
+          <div class="field"><label>اسم/وصف الرحلة</label><input name="label" placeholder="مثال: عمرة رمضان دفعة 1" value="${esc(row?.label||'')}"/></div>
+          <div class="field full"><label>ملاحظات</label><textarea name="notes" rows="3">${esc(row?.notes||'')}</textarea></div>
+        </div>
+        <div class="modal-actions"><button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+          <button type="submit" class="btn-primary btn-gold">حفظ</button></div></form></div>`;
+      document.body.appendChild(modalBg);
+      modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+      modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+      modalBg.querySelector('#trip-form-new').addEventListener('submit', async e=>{
+        e.preventDefault();
+        const guard = submitGuard(e.target); if(!guard.ok) return;
+        try{
+          const fd = new FormData(e.target);
+          const rec = {id: id||uid(), date:fd.get('date'), label:fd.get('label'), notes:fd.get('notes')};
+          if(id) await apiUpdate('trips', rec); else await apiAdd('trips', rec);
+          modalBg.remove(); render();
+        }catch(err){ console.error(err); alert('تعذر الحفظ'); guard.release(); }
+      });
+    })();
+  }
+
+  async function renderTripHub_HotelsOfTrip(page){
+    await getDataMany(['trips','trip_hotels','accom_hotels','accom_rooms','accom_guests']);
+    const trips = await getData('trips');
+    const trip = trips.find(t=>t.id===state.tripsHubTripId);
+    if(!trip){ state.tripsHubView='trips'; return render(); }
+    const links = (await getData('trip_hotels')).filter(l=>l.tripId===trip.id);
+    const allHotels = await getData('accom_hotels');
+    const rooms = await getData('accom_rooms');
+    page.innerHTML = `
+      <div class="page-head">
+        <h2>🏨 فنادق رحلة ${esc(trip.label||'')} — ${esc(trip.date||'')}</h2>
+        <button class="btn-primary btn-gold" id="link-hotel-btn" style="width:auto;padding:10px 20px;">+ ربط فندق بالرحلة</button>
+      </div>
+      ${crumbsBar([{label:'الرحلات'},{label:(trip.label||trip.date||'الفندق')}])}
+      <div class="card">
+        ${links.length? `<div class="areas-grid">${links.map(l=>{
+          const h = allHotels.find(x=>x.id===l.hotelId);
+          if(!h) return '';
+          const roomsCnt = rooms.filter(r=>r.hotelId===h.id).length;
+          return `<div class="area-chip click-card" data-link="${l.id}" data-hotel="${h.id}">
+            <div class="cnt">🏨</div><div class="nm">${esc(h.name)}</div>
+            <div class="nm" style="color:var(--muted);">${esc(h.location||'')}</div>
+            <div class="nm" style="color:var(--navy-700);font-weight:700;">${roomsCnt} غرفة</div>
+            <button class="icon-btn del" data-unlink="${l.id}" style="margin-top:6px;">✖ إلغاء الربط بالرحلة</button>
+          </div>`;
+        }).join('')}</div>` : `<div class="empty-state"><div class="big">📭</div>لا يوجد فنادق مرتبطة بهذه الرحلة بعد</div>`}
+      </div>`;
+    document.getElementById('link-hotel-btn').addEventListener('click', ()=>openLinkHotelToTripForm(trip.id, links.map(l=>l.hotelId)));
+    bindCrumbs(page, [ ()=>{ state.tripsHubView='trips'; render(); }, ()=>{} ]);
+    page.querySelectorAll('[data-link]').forEach(el=>el.addEventListener('click', (e)=>{
+      if(e.target.closest('[data-unlink]')) return;
+      state.tripsHubHotelId = el.dataset.hotel; state.tripsHubView='rooms'; render();
+    }));
+    page.querySelectorAll('[data-unlink]').forEach(b=>b.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!confirm('إلغاء ربط هذا الفندق بالرحلة؟ (الفندق وغرفه هيفضلوا موجودين في التسكين، وهيتحذف بس نزلاء هذه الرحلة في غرفه)')) return;
+      const lid = b.dataset.unlink;
+      const link = links.find(l=>l.id===lid);
+      if(link){
+        const hotelRooms = rooms.filter(r=>r.hotelId===link.hotelId).map(r=>r.id);
+        const guestsToRemove = (await getData('accom_guests')).filter(g=>g.tripId===trip.id && hotelRooms.includes(g.roomId));
+        await apiDeleteMany('accom_guests', guestsToRemove.map(g=>g.id));
+      }
+      await apiDelete('trip_hotels', lid);
+      render();
+    }));
+  }
+
+  function openLinkHotelToTripForm(tripId, excludeHotelIds){
+    (async ()=>{
+      const allHotels = await getData('accom_hotels');
+      const available = allHotels.filter(h=>!excludeHotelIds.includes(h.id));
+      const modalBg = document.createElement('div');
+      modalBg.className = 'modal-bg';
+      modalBg.innerHTML = `<div class="modal"><h3>ربط فندق بالرحلة</h3>
+        <div class="assumption-note">اختر فندقًا موجودًا بالفعل في "التسكين"، أو أنشئ فندقًا جديدًا مباشرة من هنا وسيُضاف تلقائيًا لمخزون التسكين ويُربط بهذه الرحلة، من غير ما ينعمل فندق مكرر.</div>
+        <form id="link-hotel-form"><div class="form-grid">
+          <div class="field full"><label>اختر فندق موجود</label>
+            <select name="existingHotel">
+              <option value="">— اختر من الفنادق الموجودة —</option>
+              ${available.map(h=>`<option value="${esc(h.id)}">${esc(h.name)}${h.location?' — '+esc(h.location):''}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field full" style="text-align:center;color:var(--muted);font-size:13px;">— أو —</div>
+          <div class="field full"><label>اسم فندق جديد</label><input name="newHotelName" placeholder="اتركه فارغًا لو هتختار من القائمة"/></div>
+          <div class="field full"><label>مكان الفندق الجديد</label><input name="newHotelLocation"/></div>
+        </div>
+        <div class="modal-actions"><button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+          <button type="submit" class="btn-primary btn-gold">ربط بالرحلة</button></div></form></div>`;
+      document.body.appendChild(modalBg);
+      modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+      modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+      modalBg.querySelector('#link-hotel-form').addEventListener('submit', async e=>{
+        e.preventDefault();
+        const guard = submitGuard(e.target); if(!guard.ok) return;
+        try{
+          const fd = new FormData(e.target);
+          let hotelId = fd.get('existingHotel');
+          const newName = (fd.get('newHotelName')||'').trim();
+          if(!hotelId && !newName){ alert('اختر فندقًا موجودًا أو أدخل اسم فندق جديد'); guard.release(); return; }
+          if(!hotelId && newName){
+            const newHotel = {id:uid(), name:newName, location:fd.get('newHotelLocation')||'', notes:''};
+            await apiAdd('accom_hotels', newHotel);
+            hotelId = newHotel.id;
+          }
+          const alreadyLinked = (await getData('trip_hotels')).some(l=>l.tripId===tripId && l.hotelId===hotelId);
+          if(!alreadyLinked){
+            await apiAdd('trip_hotels', {id:uid(), tripId, hotelId, notes:''});
+          }
+          modalBg.remove(); render();
+        }catch(err){ console.error(err); alert('تعذر الحفظ'); guard.release(); }
+      });
+    })();
+  }
+
+  async function renderTripHub_RoomsOfHotel(page){
+    await getDataMany(['trips','accom_hotels','accom_rooms','accom_guests']);
+    const trips = await getData('trips');
+    const trip = trips.find(t=>t.id===state.tripsHubTripId);
+    const hotels = await getData('accom_hotels');
+    const hotel = hotels.find(h=>h.id===state.tripsHubHotelId);
+    if(!trip || !hotel){ state.tripsHubView='trips'; return render(); }
+    const rooms = (await getData('accom_rooms')).filter(r=>r.hotelId===hotel.id);
+    const guests = (await getData('accom_guests')).filter(g=>g.tripId===trip.id);
+    page.innerHTML = `
+      <div class="page-head">
+        <h2>🛏️ غرف فندق ${esc(hotel.name)} — رحلة ${esc(trip.label||trip.date||'')}</h2>
+        <button class="btn-primary btn-gold" id="add-room-trip-btn" style="width:auto;padding:10px 20px;">+ إضافة غرفة لهذا الفندق</button>
+      </div>
+      ${crumbsBar([{label:'الرحلات'},{label:(trip.label||trip.date)},{label:hotel.name}])}
+      <div class="assumption-note">الغرف هنا تابعة للفندق نفسه (مش خاصة بالرحلة)، ويمكن استخدام نفس الغرفة في رحلات أخرى بتواريخ مختلفة. عدد النزلاء المعروض هنا خاص بنزلاء هذه الرحلة فقط.</div>
+      <div class="card">
+        ${rooms.length? `<div class="areas-grid">${rooms.map(r=>{
+          const cnt = guests.filter(g=>g.roomId===r.id).length;
+          const cap = num_(r.capacity)||1;
+          const pct = Math.min(100, Math.round(cnt/cap*100));
+          return `<div class="area-chip click-card" data-room="${r.id}">
+            <div class="cnt">🛏️ ${esc(r.roomNumber||'')}</div>
+            <div class="nm">${roomTypeBadge(r.roomType)}</div>
+            <div class="nm">${cnt} / ${cap} فرد (لهذه الرحلة)</div>
+            <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${cnt>cap?'var(--danger)':'var(--navy-600)'};"></div></div>
+          </div>`;
+        }).join('')}</div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد غرف في هذا الفندق بعد</div>`}
+      </div>`;
+    document.getElementById('add-room-trip-btn').addEventListener('click', ()=>openStandaloneRoomForm(hotel.id, null, ()=>render()));
+    bindCrumbs(page, [ ()=>{ state.tripsHubView='trips'; render(); }, ()=>{ state.tripsHubView='hotels'; render(); }, ()=>{} ]);
+    page.querySelectorAll('[data-room]').forEach(el=>el.addEventListener('click', ()=>{
+      state.tripsHubRoomId = el.dataset.room; state.tripsHubView='guests'; render();
+    }));
+  }
+
+  async function renderTripHub_GuestsOfRoom(page){
+    await getDataMany(['trips','accom_hotels','accom_rooms','accom_guests']);
+    const trips = await getData('trips');
+    const trip = trips.find(t=>t.id===state.tripsHubTripId);
+    const rooms = await getData('accom_rooms');
+    const room = rooms.find(r=>r.id===state.tripsHubRoomId);
+    if(!trip || !room){ state.tripsHubView='trips'; return render(); }
+    const hotels = await getData('accom_hotels');
+    const hotel = hotels.find(h=>h.id===room.hotelId);
+    const guests = (await getData('accom_guests')).filter(g=>g.roomId===room.id && g.tripId===trip.id);
+    const cap = num_(room.capacity)||1;
+    page.innerHTML = `
+      <div class="page-head">
+        <h2>👤 نزلاء غرفة ${esc(room.roomNumber||'')} — ${esc(hotel?hotel.name:'')} — رحلة ${esc(trip.label||trip.date||'')}</h2>
+        <button class="btn-primary btn-gold" id="add-guest-trip-btn" style="width:auto;padding:10px 20px;">+ إضافة نزيل</button>
+      </div>
+      ${crumbsBar([{label:'الرحلات'},{label:(trip.label||trip.date)},{label:(hotel?hotel.name:'')},{label:'غرفة '+(room.roomNumber||'')}])}
+      ${guests.length>cap? `<div class="assumption-note" style="background:#fdeceb;border-color:#f3c6c2;color:var(--danger);">تنبيه: عدد النزلاء (${guests.length}) أكبر من سعة الغرفة (${cap}) في هذه الرحلة</div>`:''}
+      <div class="card">
+        ${guests.length? `<div class="table-wrap"><table>
+          <thead><tr><th>الاسم</th><th>الرقم القومي</th><th>رقم الجواز</th><th>الهاتف</th><th>حالة الطيران</th><th></th></tr></thead>
+          <tbody>${guests.map(g=>`<tr>
+            <td>${esc(g.name)}</td><td>${esc(g.nationalId)}</td><td>${esc(g.passportNumber)}</td><td>${esc(g.phone)}</td>
+            <td>${fieldDisplay({key:'flightStatus'}, g.flightStatus)}</td>
+            <td><button class="icon-btn" data-editg="${g.id}">✏️</button><button class="icon-btn del" data-delg="${g.id}">🗑️</button></td>
+          </tr>`).join('')}</tbody></table></div>` : `<div class="empty-state"><div class="big">📭</div>لا يوجد نزلاء بعد في هذه الغرفة لهذه الرحلة</div>`}
+      </div>`;
+    document.getElementById('add-guest-trip-btn').addEventListener('click', ()=>openTripGuestForm(trip.id, room.id, null));
+    bindCrumbs(page, [ ()=>{ state.tripsHubView='trips'; render(); }, ()=>{ state.tripsHubView='hotels'; render(); },
+      ()=>{ state.tripsHubView='rooms'; render(); }, ()=>{} ]);
+    page.querySelectorAll('[data-editg]').forEach(b=>b.addEventListener('click', ()=>openTripGuestForm(trip.id, room.id, b.dataset.editg)));
+    page.querySelectorAll('[data-delg]').forEach(b=>b.addEventListener('click', async ()=>{
+      if(!confirm('حذف النزيل؟')) return;
+      await apiDelete('accom_guests', b.dataset.delg); render();
+    }));
+  }
+
+  async function openTripGuestForm(tripId, roomId, id){
+    const list = await getData('accom_guests');
+    const row = id? list.find(g=>g.id===id) : {};
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal"><h3>${id?'تعديل بيانات نزيل':'إضافة نزيل'}</h3>
+      <form id="guest-trip-form"><div class="form-grid">
+        <div class="field"><label>الاسم</label><input name="name" required value="${esc(row.name||'')}"/></div>
+        <div class="field"><label>الرقم القومي</label><input name="nationalId" value="${esc(row.nationalId||'')}"/></div>
+        <div class="field"><label>رقم الجواز</label><input name="passportNumber" value="${esc(row.passportNumber||'')}"/></div>
+        <div class="field"><label>الهاتف</label><input name="phone" value="${esc(row.phone||'')}"/></div>
+        <div class="field"><label>حالة حجز الطيران</label><select name="flightStatus">
+          <option value="لم يُحجز" ${row.flightStatus==='لم يُحجز'?'selected':''}>لم يُحجز</option>
+          <option value="تم الحجز" ${row.flightStatus==='تم الحجز'?'selected':''}>تم الحجز</option>
+        </select></div>
+        <div class="field full"><label>ملاحظات</label><textarea name="notes" rows="2">${esc(row.notes||'')}</textarea></div>
+      </div>
+      <div class="modal-actions"><button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+        <button type="submit" class="btn-primary btn-gold">حفظ</button></div></form></div>`;
+    document.body.appendChild(modalBg);
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+    modalBg.querySelector('#guest-trip-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const guard = submitGuard(e.target); if(!guard.ok) return;
+      try{
+        const fd = new FormData(e.target);
+        const rec = {id: id||uid(), roomId, tripId, name:fd.get('name'), nationalId:fd.get('nationalId'), passportNumber:fd.get('passportNumber'),
+          phone:fd.get('phone'), flightStatus:fd.get('flightStatus'), notes:fd.get('notes'),
+          subscriptionId: row.subscriptionId||''};
+        if(id) await apiUpdate('accom_guests', rec); else await apiAdd('accom_guests', rec);
+        modalBg.remove(); render();
+      }catch(err){ console.error(err); alert('تعذر الحفظ'); guard.release(); }
+    });
+  }
+
+
+  async function renderIndoorDataSheet(page){
+    const mod = MODULES.indoor_data;
+    await getDataMany(['indoor_data','employees','app_settings']);
+    const data = await getData('indoor_data');
+    const emps = await getData('employees');
+    const repOptions = emps.filter(e=>e.department==='علاقات عامة - إن دور').map(e=>e.name);
+    const canEditLink = ['admin','pr_in'].includes(state.user.role);
+    const sheetLink = await getSetting('indoor_data_sheet_link');
+    const cols = mod.fields;
+    page.innerHTML = `
+      <div class="page-head"><h2>${mod.icon} ${esc(mod.title)}</h2></div>
+      <div class="sheet-toolbar">
+        ${sheetLink? `<a href="${esc(sheetLink)}" target="_blank" rel="noopener" class="icon-btn" style="background:var(--sand-100);">📄 فتح شيت الموظفين</a>` : ''}
+        ${canEditLink? `<button class="icon-btn" id="set-link-btn" style="background:var(--sand-100);">🔗 ${sheetLink?'تعديل رابط الشيت':'ربط شيت خارجي'}</button>`:''}
+        <button class="btn-primary btn-gold" id="add-row-btn" style="width:auto;padding:9px 18px;">+ صف جديد</button>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div class="table-wrap"><table>
+          <thead><tr>${cols.map(f=>`<th>${esc(f.label)}</th>`).join('')}<th></th></tr></thead>
+          <tbody id="sheet-body">${data.map(row=>renderSheetRow(row, cols, repOptions)).join('')}</tbody>
+        </table></div>
+        ${!data.length? `<div class="empty-state"><div class="big">📭</div>لا توجد بيانات بعد — اضغط "+ صف جديد"</div>`:''}
+      </div>`;
+
+    if(canEditLink){
+      document.getElementById('set-link-btn').addEventListener('click', async ()=>{
+        const val = prompt('ضع رابط شيت جوجل الخاص بالموظفين (Google Sheet URL):', sheetLink||'');
+        if(val===null) return;
+        await setSetting('indoor_data_sheet_link', val.trim());
+        render();
+      });
+    }
+    document.getElementById('add-row-btn').addEventListener('click', async ()=>{
+      const rec = {id:uid()}; cols.forEach(f=>rec[f.key]='');
+      await apiAdd('indoor_data', rec); render();
+    });
+    page.querySelectorAll('.cell-input').forEach(inp=>{
+      inp.addEventListener('change', async ()=>{
+        const id = inp.dataset.id, key = inp.dataset.key;
+        const rows = await getData('indoor_data');
+        const rec = rows.find(r=>r.id===id); if(!rec) return;
+        rec[key] = inp.value;
+        await apiUpdate('indoor_data', rec);
+      });
+    });
+    page.querySelectorAll('[data-delrow]').forEach(b=>b.addEventListener('click', async ()=>{
+      if(!confirm('حذف الصف؟')) return;
+      await apiDelete('indoor_data', b.dataset.delrow); render();
+    }));
+  }
+
+  function renderSheetRow(row, cols, repOptions){
+    return `<tr>${cols.map(f=>{
+      if(f.key==='responsiblePerson'){
+        return `<td><select class="cell-input" data-id="${row.id}" data-key="${f.key}">
+          <option value="">اختر...</option>
+          ${repOptions.map(o=>`<option value="${esc(o)}" ${o===row[f.key]?'selected':''}>${esc(o)}</option>`).join('')}
+        </select></td>`;
+      }
+      return `<td><input class="cell-input" data-id="${row.id}" data-key="${f.key}" value="${esc(row[f.key]||'')}"/></td>`;
+    }).join('')}<td><button class="icon-btn del" data-delrow="${row.id}">🗑️</button></td></tr>`;
+  }
+
+  /* ---------------- قسم الفائزون ---------------- */
+  async function renderWinnersSection(page){
+    if(!MODULES.winners.roles.includes(state.user.role)) return;
+    await getDataMany(['subscriptions','trips','accom_hotels','accom_rooms']);
+    let data = await filterPRData('subscriptions', await getData('subscriptions'));
+    data = data.filter(r=>String(r.lotteryStatus||'')==='فائز');
+
+    const trips=cache['trips']||[], hotels=cache['accom_hotels']||[], rooms=cache['accom_rooms']||[];
+    const tripMap=Object.fromEntries(trips.map(r=>[r.id,linkLabel('trips',r)]));
+    const hotelMap=Object.fromEntries(hotels.map(r=>[r.id,linkLabel('accom_hotels',r)]));
+    const roomMap=Object.fromEntries(rooms.map(r=>[r.id,linkLabel('accom_rooms',r)]));
+    state.moduleSearch=state.moduleSearch||{};
+    const searchTerm=state.moduleSearch.winners||'';
+    // بنحسب نص البحث لكل صف مرة واحدة بس (مش مع كل حرف يتكتب)، عشان تفادي
+    // إعادة حساب join/toLowerCase على كل الصفوف مع كل ضغطة زر أثناء الكتابة.
+    const searchIndex=data.map(r=>({row:r, text:[r.customerName,r.packageType,r.phone,r.nationalId,r.gender,r.governorate,r.travelStatus,tripMap[r.tripId],hotelMap[r.hotelId],roomMap[r.roomId]].join(' ').toLowerCase()}));
+    const getRows=term=>{
+      term=String(term||'').trim().toLowerCase();
+      return term? searchIndex.filter(x=>x.text.includes(term)).map(x=>x.row) : data;
+    };
+    const tableHtml=rows=>!rows.length
+      ? `<div class="empty-state"><div class="big">${data.length?'🔍':'🏆'}</div>${data.length?'لا توجد نتائج مطابقة للبحث':'لا يوجد فائزون حتى الآن'}</div>`
+      : `<div class="table-wrap"><table><thead><tr><th>العميل</th><th>نوع الاشتراك</th><th>الهاتف</th><th>الرقم القومي</th><th>الجنس</th><th>المحافظة</th><th>حالة القرعة</th><th>الرحلة</th><th>الفندق</th><th>الغرفة</th><th>حالة السفر</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr>
+        <td>${esc(r.customerName||'')}</td><td>${esc(r.packageType||'')}</td><td>${esc(r.phone||'')}</td><td>${esc(r.nationalId||'')}</td><td>${esc(r.gender||'')}</td><td>${esc(r.governorate||'')}</td>
+        <td><span class="badge gold">فائز</span></td>
+        <td><select class="winner-trip-select" data-id="${esc(r.id)}" style="min-width:180px"><option value="">— بدون رحلة —</option>${trips.map(t=>`<option value="${esc(t.id)}" ${String(t.id)===String(r.tripId||'')?'selected':''}>${esc(linkLabel('trips',t))}</option>`).join('')}</select></td>
+        <td>${esc(hotelMap[r.hotelId]||'—')}</td><td>${esc(roomMap[r.roomId]||'—')}</td><td>${esc(r.travelStatus||'لسه مسافر')}</td>
+        <td><button class="icon-btn" data-winner-edit="${esc(r.id)}">✏️</button></td>
+      </tr>`).join('')}</tbody></table></div>`;
+    page.innerHTML=`<div class="page-head"><h2>🏆 الفائزون</h2></div>
+      ${isPRUser()&&state.user.role!=='pr_manager'?`<div class="assumption-note">البيانات المعروضة هنا خاصة بنطاق صلاحيتك.</div>`:''}
+      ${data.length?`<div class="card" style="padding:14px 20px;margin-bottom:14px;"><input type="text" id="winners-search-input" placeholder="🔍 ابحث في الفائزون..." value="${esc(searchTerm)}" style="width:100%;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);"/></div>`:''}
+      <div class="card"><div id="winners-table-wrap">${tableHtml(getRows(searchTerm))}</div></div>`;
+    const bind=container=>{
+      container.querySelectorAll('[data-winner-edit]').forEach(b=>b.addEventListener('click',()=>openForm('subscriptions',b.dataset.winnerEdit)));
+      container.querySelectorAll('.winner-trip-select').forEach(sel=>sel.addEventListener('change',async()=>{
+        const subs=await getData('subscriptions'), row=subs.find(x=>String(x.id)===String(sel.dataset.id)); if(!row)return;
+        sel.disabled=true;
+        try{const updated={...row,tripId:sel.value}; await apiUpdate('subscriptions',updated); await syncSubscriptionGuest(updated); render();}
+        catch(err){console.error(err);alert(err.message||'تعذر تحديث الرحلة');sel.disabled=false;}
+      }));
+    };
+    const wrap=document.getElementById('winners-table-wrap'); bind(wrap);
+    const input=document.getElementById('winners-search-input');
+    if(input){
+      // debounce على البحث: بنستنى المستخدم يوقف عن الكتابة 180ms قبل إعادة رسم
+      // الجدول، بدل ما نعيد الرسم مع كل حرف يتكتب — ده كان بيسبب لاج واضح في الكتابة.
+      let winnersDebounce;
+      input.addEventListener('input',()=>{
+        state.moduleSearch.winners=input.value;
+        clearTimeout(winnersDebounce);
+        winnersDebounce=setTimeout(()=>{
+          wrap.innerHTML=tableHtml(getRows(input.value));
+          bind(wrap);
+        },180);
+      });
+    }
+  }
+
+  /* ---------------- Generic module CRUD renderer ---------------- */
+  async function renderModule(page, key){
+    const mod = MODULES[key];
+    if(!mod || !mod.roles.includes(state.user.role)) return;
+    const linkRefs = mod.fields.filter(f=>f.type==='linkSelect').map(f=>f.ref);
+    const extraRefs = key==='subscriptions' ? ['indoor_leads'] : [];
+    await getDataMany([key, ...((isPRUser()||key==='visits')?['employees']:[]), ...linkRefs, ...extraRefs]);
+    const allData = await getData(key);
+    let data = await filterPRData(key, allData);
+
+    if(key==='visits' && state.user.role!=='admin'){
+      const emp = await currentEmployeeFresh();
+      const myTeam = emp?.team || '';
+      if(myTeam){
+        const employees = await getData('employees');
+        const teamNames = new Set(employees.filter(e=>e.team===myTeam).map(e=>e.name));
+        data = data.filter(r=> teamNames.has(r.visitedBy));
+      } else {
+        const myName = emp?.name || state.user.name;
+        data = data.filter(r=> r.visitedBy===myName);
+      }
+    }
+
+    if(key==='subscriptions'){
+      const leads = await getData('indoor_leads');
+      data = data.map(row=>{
+        if(row.leadId) return row;
+
+        const rowPhone = String(row.phone||'').replace(/\D/g,'');
+        const rowName = String(row.customerName||'').trim();
+
+        const lead = leads.find(l=>{
+          const leadPhone = String(l.phone||'').replace(/\D/g,'');
+          const leadName = String(l.name||'').trim();
+
+          const phoneMatch = rowPhone && leadPhone && (
+            rowPhone===leadPhone ||
+            rowPhone.endsWith(leadPhone.slice(-10)) ||
+            leadPhone.endsWith(rowPhone.slice(-10))
+          );
+
+          const nameMatch = rowName && leadName && rowName===leadName;
+
+          return phoneMatch || nameMatch;
+        });
+
+        if(!lead) return row;
+
+        return {
+          ...row,
+          leadId: lead.id || '',
+          nationalId: row.nationalId || lead.nationalId || ''
+        };
+      });
+    }
+    const linkMaps = {};
+    mod.fields.filter(f=>f.type==='linkSelect').forEach(f=>{
+      const refList = cache[f.ref] || [];
+      linkMaps[f.key] = Object.fromEntries(refList.map(r=>[r.id, linkLabel(f.ref, r)]));
+    });
+    if(key==='subscriptions'){
+      const leads = cache['indoor_leads'] || [];
+      linkMaps.__leadCodes = Object.fromEntries(leads.map(l=>[l.id, l.code||'']));
+    }
+
+    state.moduleSearch = state.moduleSearch || {};
+    const searchTerm = state.moduleSearch[key] || '';
+
+    const bindTableEvents = (container, visibleData)=>{
+      container.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click', ()=>{
+        const row=visibleData.find(r=>String(r.id)===String(b.dataset.edit));
+        if(prCanEditRow(key,row)) openForm(key,b.dataset.edit); else alert('ليس لديك صلاحية لتعديل هذه البيانات');
+      }));
+      container.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', async ()=>{
+        const row=visibleData.find(r=>String(r.id)===String(b.dataset.del));
+        if(!prCanEditRow(key,row)){ alert('ليس لديك صلاحية لحذف هذه البيانات'); return; }
+        if(!confirm('تأكيد الحذف؟')) return;
+        await apiDelete(key,b.dataset.del);
+        if(key==='subscriptions'){
+          const guests = await getData('accom_guests');
+          const linked = guests.find(g=>String(g.subscriptionId||'')===String(b.dataset.del));
+          if(linked) await apiDelete('accom_guests', linked.id);
+        }
+        render();
+      }));
+    };
+
+    const tableSectionHtml = (visibleData)=>{
+      if(!data.length) return `<div class="empty-state"><div class="big">📭</div>لا توجد بيانات بعد — ابدأ بالإضافة</div>`;
+      if(!visibleData.length) return `<div class="empty-state"><div class="big">🔍</div>لا توجد نتائج مطابقة للبحث</div>`;
+      return `<div class="table-wrap"><table>
+          <thead><tr>${mod.fields.map(f=>`<th>${esc(f.label)}</th>`).join('')}<th></th></tr></thead>
+          <tbody>${visibleData.map(row=>renderRow(mod,row,linkMaps)).join('')}</tbody>
+        </table></div>`;
+    };
+
+    page.innerHTML = `
+      <div class="page-head">
+        <h2>${mod.icon} ${esc(mod.title)}</h2>
+        <button class="btn-primary btn-gold" id="add-btn" style="width:auto;padding:10px 20px;">+ إضافة</button>
+      </div>
+      ${isPRUser() && state.user.role!=='pr_manager' ? `<div class="assumption-note">البيانات المعروضة هنا خاصة بنطاق صلاحيتك. لا يتم عرض بيانات أعضاء العلاقات العامة الآخرين.</div>`:''}
+      ${data.length? `<div class="card" style="padding:14px 20px;margin-bottom:14px;">
+        <input type="text" id="module-search-input" placeholder="🔍 ابحث في ${esc(mod.title)}..." value="${esc(searchTerm)}"
+          style="width:100%;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);"/>
+      </div>` : ''}
+      <div class="card"><div id="module-table-wrap">${tableSectionHtml(filterModuleRows(mod, data, linkMaps, searchTerm))}</div></div>`;
+
+    document.getElementById('add-btn').addEventListener('click', ()=> key==='employees' ? openEmployeeAccountForm() : openForm(key, null));
+
+    // بنحسب نص البحث لكل صف مرة واحدة بس هنا عند فتح الصفحة (مش مع كل حرف يتكتب)،
+    // فالفلترة أثناء الكتابة بقت مجرد .includes() سريع على نص جاهز بدل إعادة
+    // بناء النص من كل حقول الصف وكل الـ linkMaps مع كل ضغطة — وده كان أكبر سبب لاج
+    // ملموس أثناء الكتابة في جداول فيها مئات الصفوف (زي الاشتراكات والمهتمين).
+    const searchIndex = data.map(row=>({row, text: rowSearchText(mod, row, linkMaps)}));
+    const filterBySearchIndex = (term)=>{
+      term = (term||'').trim().toLowerCase();
+      return term ? searchIndex.filter(x=>x.text.includes(term)).map(x=>x.row) : data;
+    };
+
+    let currentVisible = filterBySearchIndex(searchTerm);
+    bindTableEvents(document.getElementById('module-table-wrap'), currentVisible);
+
+    const searchInput = document.getElementById('module-search-input');
+    if(searchInput){
+      // debounce: بنستنى المستخدم يوقف عن الكتابة 180ms قبل إعادة رسم الجدول،
+      // بدل ما نعيد الرسم الكامل (وإعادة ربط كل الأزرار) مع كل حرف يتكتب.
+      let debounceTimer;
+      searchInput.addEventListener('input', ()=>{
+        state.moduleSearch[key] = searchInput.value;
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(()=>{
+          currentVisible = filterBySearchIndex(searchInput.value);
+          const wrap = document.getElementById('module-table-wrap');
+          wrap.innerHTML = tableSectionHtml(currentVisible);
+          bindTableEvents(wrap, currentVisible);
+        }, 180);
+      });
+    }
+  }
+
+  // نص قابل للبحث فيه لكل صف: بيحوّل القيم المرتبطة (linkSelect/كود العميل) لنصها
+  // الظاهر للمستخدم بدل الـ id الداخلي، عشان البحث يشتغل بالاسم اللي المستخدم شايفه فعليًا.
+  function rowSearchText(mod, row, linkMaps){
+    const parts = mod.fields.map(f=>{
+      const v = row[f.key];
+      if(f.key==='leadId'){
+        const code = linkMaps && linkMaps.__leadCodes && linkMaps.__leadCodes[v];
+        return code || v || '';
+      }
+      if(f.type==='linkSelect'){
+        const label = linkMaps && linkMaps[f.key] && linkMaps[f.key][v];
+        return label || v || '';
+      }
+      if(f.type==='image') return '';
+      return v==null? '' : String(v);
+    });
+    return parts.join(' ').toLowerCase();
+  }
+  function filterModuleRows(mod, data, linkMaps, searchTerm){
+    const term = (searchTerm||'').trim().toLowerCase();
+    if(!term) return data;
+    return data.filter(r=> rowSearchText(mod, r, linkMaps).includes(term));
+  }
+
+  function fieldDisplay(f, val, linkMaps, row){
+    if(f.key==='leadId'){
+      const leadId = String(row?.leadId || val || '').trim();
+      if(!leadId) return '';
+      const code = linkMaps && linkMaps.__leadCodes && linkMaps.__leadCodes[leadId];
+      if(code) return esc(code);
+
+      const nationalId = String(row?.nationalId || '').replace(/\D/g,'');
+      const phone = String(row?.phone || '').replace(/\D/g,'');
+      const nationalPart = nationalId.slice(0,4);
+      const phonePart = phone.slice(-2);
+      const parts = [leadId];
+      if(nationalPart) parts.push(nationalPart);
+      if(phonePart) parts.push(phonePart);
+      return esc(parts.join(' - '));
+    }
+
+    if(f.type==='image'){
+      return val? `<img class="row-photo" src="${val}"/>` : `<div class="row-photo"></div>`;
+    }
+    if(f.type==='linkSelect'){
+      if(!val) return '';
+      const label = linkMaps && linkMaps[f.key] && linkMaps[f.key][val];
+      return esc(label || val);
+    }
+    if(f.key==='status' || f.key==='flightStatus' || f.key==='paymentStatus'){
+      const map = {'تم التواصل':'blue','تم تحديد معاد':'gold','تم الرفض':'red','تحت التفاوض':'gold',
+        'لم يتم التوصل لأي شيء':'gray','لم تتم الزيارة':'gray','مكتمل':'green','جاري السداد':'gold','متأخر':'red',
+        'تم الحجز':'green','لم يُحجز':'gray','جديد':'blue','تحويل لحجز':'green'};
+      const cls = map[val] || 'gray';
+      return val? `<span class="badge ${cls}">${esc(val)}</span>` : '';
+    }
+    return esc(val);
+  }
+
+  function renderRow(mod, row, linkMaps){
+    return `<tr>${mod.fields.map(f=>`<td>${fieldDisplay(f,row[f.key],linkMaps,row)}</td>`).join('')}
+      <td style="white-space:nowrap;">
+        <button class="icon-btn" data-edit="${row.id}">✏️</button>
+        <button class="icon-btn del" data-del="${row.id}">🗑️</button>
+      </td></tr>`;
+  }
+
+  async function openEmployeeAccountForm(){
+    if(!['admin','hr'].includes(state.user.role)) return;
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal">
+      <h3>إضافة موظف + إنشاء حساب دخول</h3>
+      <div class="assumption-note">الحساب والبيانات يتم حفظهما في Google Sheets. كلمة المرور تُحفظ بشكل مُشفّر (Hash) ولا تظهر بعد الحفظ.</div>
+      <form id="employee-account-form"><div class="form-grid">
+        <div class="field"><label>اسم الموظف *</label><input name="name" required /></div>
+        <div class="field"><label>اسم المستخدم *</label><input name="username" required pattern="[a-zA-Z0-9._-]{3,40}" placeholder="مثال: ahmed123" /></div>
+        <div class="field"><label>كلمة المرور *</label><input name="password" type="password" minlength="12" required placeholder="12 حرفًا على الأقل" /></div>
+        <div class="field"><label>تأكيد كلمة المرور *</label><input name="password2" type="password" minlength="12" required /></div>
+        <div class="field"><label>الصلاحية *</label><select name="role" required>
+          <option value="">اختر...</option>${Object.entries(ROLE_LABELS).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')}
+        </select></div>
+        <div class="field"><label>القسم</label><select name="department"><option value="">اختر...</option>${Object.values(ROLE_LABELS).map(v=>`<option>${esc(v)}</option>`).join('')}</select></div>
+        <div class="field"><label>الرقم الخاص</label><input name="specialNumber" /></div>
+        <div class="field"><label>رقم الشركة</label><input name="companyNumber" /></div>
+        <div class="field"><label>رقم الهاتف</label><input name="phone" /></div>
+        <div class="field"><label>العنوان</label><input name="address" /></div>
+        <div class="field"><label>تاريخ التعيين</label><input name="hireDate" type="date" /></div>
+        <div class="field"><label>الراتب</label><input name="salary" type="number" /></div>
+        <div class="field full"><label>الفريق</label><select name="team"><option value="">بدون فريق</option></select></div>
+      </div>
+      <div class="modal-actions"><button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button><button type="submit" class="btn-primary btn-gold">إنشاء الحساب والموظف</button></div>
+      </form></div>`;
+    document.body.appendChild(modalBg);
+    const teams = await getData('teams');
+    const teamSel = modalBg.querySelector('[name="team"]');
+    teamSel.innerHTML = '<option value="">بدون فريق</option>' + teams.map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{if(e.target===modalBg) modalBg.remove();});
+    modalBg.querySelector('#employee-account-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const form=e.target, btn=form.querySelector('button[type=submit]');
+      const password=form.password.value, password2=form.password2.value;
+      if(password!==password2){ alert('تأكيد كلمة المرور غير مطابق'); return; }
+      btn.disabled=true; btn.textContent='جارٍ إنشاء الحساب...';
+      try{
+        const payload={
+          name:form.name.value.trim(), username:form.username.value.trim().toLowerCase(), password,
+          role:form.role.value,
+          employeeData:{specialNumber:form.specialNumber.value, companyNumber:form.companyNumber.value, department:form.department.value,
+            team:form.team.value, phone:form.phone.value, address:form.address.value, hireDate:form.hireDate.value||null,
+            salary:form.salary.value?Number(form.salary.value):null}
+        };
+        if(!payload.name || !payload.username || !payload.password || !payload.role) throw new Error('أكمل البيانات المطلوبة');
+        await authRequest('createEmployeeAccount', payload);
+        modalBg.remove(); render();
+      }catch(err){
+        console.error(err); alert(err.message || 'فشل إنشاء حساب الموظف'); btn.disabled=false; btn.textContent='إنشاء الحساب والموظف';
+      }
+    });
+  }
+
+  /** أي موظف مسجّل دخوله يقدر يغيّر اسم المستخدم و/أو كلمة المرور بتاعته من هنا */
+  function openChangeAccountForm(){
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal">
+      <h3>تغيير بيانات الدخول</h3>
+      <div class="assumption-note">سيبها فاضية لو مش عايز تغيّرها. لازم تدخل كلمة المرور الحالية للتأكيد.</div>
+      <form id="change-account-form"><div class="form-grid">
+        <div class="field"><label>اسم المستخدم الجديد (اختياري)</label><input name="newUsername" pattern="[a-zA-Z0-9._-]{3,40}" placeholder="سيبها فاضية لو مش هتغيّر" /></div>
+        <div class="field"><label>كلمة المرور الجديدة (اختياري)</label><input name="newPassword" type="password" minlength="12" placeholder="12 حرفًا على الأقل" /></div>
+        <div class="field full"><label>كلمة المرور الحالية *</label><input name="currentPassword" type="password" required /></div>
+      </div>
+      <div class="modal-actions"><button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button><button type="submit" class="btn-primary btn-gold">حفظ</button></div>
+      </form></div>`;
+    document.body.appendChild(modalBg);
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{if(e.target===modalBg) modalBg.remove();});
+    modalBg.querySelector('#change-account-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const form=e.target, btn=form.querySelector('button[type=submit]');
+      const newUsername = form.newUsername.value.trim();
+      const newPassword = form.newPassword.value;
+      const currentPassword = form.currentPassword.value;
+      if(!newUsername && !newPassword){ alert('حدد اسم مستخدم جديد أو كلمة مرور جديدة على الأقل'); return; }
+      btn.disabled=true; btn.textContent='جارٍ الحفظ...';
+      try{
+        const data=await authRequest('changePassword',{currentPassword,newUsername,newPassword});
+        if(data.user) state.user=data.user;
+        if(data.session){
+          HOMSA_SESSION=data.session;
+          sessionStorage.setItem('homsa_session_token',HOMSA_SESSION);
+        }
+        if(state.user) sessionStorage.setItem('homsa_session_user',JSON.stringify(state.user));
+        alert('تم تحديث بيانات الدخول بنجاح.' + (newUsername? ' اسم المستخدم الجديد: '+data.user.username : ''));
+        modalBg.remove(); render();
+      }catch(err){
+        console.error(err); alert(err.message || 'فشل تحديث بيانات الدخول'); btn.disabled=false; btn.textContent='حفظ';
+      }
+    });
+  }
+
+  async function openForm(key, id){
+    const mod = MODULES[key];
+    if(!mod || !mod.roles.includes(state.user.role)) return;
+    const refKeys = mod.fields.filter(f=>f.type==='dynamicSelect'||f.type==='linkSelect').map(f=>f.ref);
+    if(key==='subscriptions') refKeys.push('trip_hotels');
+    await getDataMany([key, 'employees', ...refKeys]);
+    const list = await getData(key);
+    const row = id? list.find(r=>r.id===id) : {};
+    if(id && !prCanEditRow(key,row)){ alert('ليس لديك صلاحية لتعديل هذه البيانات'); return; }
+    let refOptions = {};
+    for(const f of mod.fields){
+      if(f.type==='dynamicSelect'){
+        let refList = await getData(f.ref);
+        if(f.filter) refList = refList.filter(r=> r[f.filter.field]===f.filter.value);
+        if(isPRUser() && ['pr_manager','pr_leader','pr_member'].includes(state.user.role) && f.ref==='employees'){
+          if(state.user.role==='pr_manager') {}
+          else {
+            const names=await prAllowedNames();
+            refList=refList.filter(r=>names.has(r.name));
+          }
+        }
+        if(key==='visits' && f.key==='visitedBy' && state.user.role!=='admin'){
+          const emp = await currentEmployeeFresh();
+          const myTeam = emp?.team || '';
+          refList = myTeam ? refList.filter(r=>r.team===myTeam) : refList.filter(r=>r.name===(emp?.name||state.user.name));
+        }
+        refOptions[f.key] = refList.map(r=>r[f.refField]);
+      } else if(f.type==='linkSelect'){
+        const parentVal = f.parentKey ? (row? (row[f.parentKey]||'') : '') : null;
+        refOptions[f.key] = await linkSelectOptionsFor(key, f, parentVal);
+      }
+    }
+
+    const modalBg = document.createElement('div');
+    modalBg.className = 'modal-bg';
+    modalBg.innerHTML = `<div class="modal">
+      <h3>${id? 'تعديل بيانات':'إضافة جديد'} — ${esc(mod.title)}</h3>
+      <form id="mod-form"><div class="form-grid">
+        ${mod.fields.map(f=>renderField(f, row, refOptions)).join('')}
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
+        <button type="submit" class="btn-primary btn-gold">حفظ</button>
+      </div></form>
+    </div>`;
+    document.body.appendChild(modalBg);
+
+    const cascadeFields = mod.fields.filter(f=>f.type==='linkSelect' && f.parentKey);
+    if(cascadeFields.length){
+      const fillOptions = async (field, parentVal)=>{
+        const sel = modalBg.querySelector(`[name="${field.key}"]`);
+        if(!sel) return;
+        const list = await linkSelectOptionsFor(key, field, parentVal);
+        sel.innerHTML = `<option value="">— بدون —</option>` + list.map(o=>`<option value="${esc(o.id)}">${esc(o.label)}</option>`).join('');
+      };
+      cascadeFields.forEach(f=>{
+        const parentSel = modalBg.querySelector(`[name="${f.parentKey}"]`);
+        if(!parentSel) return;
+        parentSel.addEventListener('change', async ()=>{
+          await fillOptions(f, parentSel.value);
+          const grandChild = cascadeFields.find(gc=>gc.parentKey===f.key);
+          if(grandChild){
+            const gcSel = modalBg.querySelector(`[name="${grandChild.key}"]`);
+            if(gcSel) gcSel.innerHTML = `<option value="">— بدون —</option>`;
+          }
+        });
+      });
+    }
+
+    modalBg.querySelector('#cancel-btn').addEventListener('click', ()=>modalBg.remove());
+    modalBg.addEventListener('click', e=>{ if(e.target===modalBg) modalBg.remove(); });
+
+    const imgInput = modalBg.querySelector('input[type=file]');
+    if(imgInput){
+      imgInput.addEventListener('change', ()=>{
+        const file = imgInput.files[0]; if(!file) return;
+        const reader = new FileReader();
+        reader.onload = ()=>{ imgInput.dataset.value = reader.result;
+          const prev = modalBg.querySelector('.photo-preview'); if(prev) prev.src = reader.result; };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    modalBg.querySelector('#mod-form').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const guard = submitGuard(e.target); if(!guard.ok) return;
+      try{
+        const isNew = !row.id;
+        const newRow = row.id? {...row} : {id: uid()};
+        for(const f of mod.fields){
+          if(f.type==='readonly') continue;
+          if(f.type==='image'){ newRow[f.key] = imgInput.dataset.value || row[f.key] || ''; continue; }
+          const el = modalBg.querySelector(`[name="${f.key}"]`);
+          if(el) newRow[f.key] = el.value;
+        }
+
+        if(key==='indoor_leads' && isNew && !newRow.code){
+          newRow.code = generateCustomerCode(newRow.phone);
+        }
+
+        if(isPRUser() && state.user.role==='pr_member'){
+          const me=await currentEmployeeFresh(), myName=me?.name||state.user.name;
+          if(['indoor_leads','indoor_data','subscriptions'].includes(key)) newRow.responsiblePerson=myName;
+          if(key==='pr_member_data') newRow.memberId=myName;
+        }
+        if(isPRUser() && state.user.role==='pr_leader'){
+          const names=await prAllowedNames();
+          if(['indoor_leads','indoor_data','subscriptions'].includes(key) && newRow.responsiblePerson && !names.has(newRow.responsiblePerson))
+            throw new Error('لا يمكن ربط البيانات بعضو خارج فريقك');
+          if(key==='pr_member_data' && newRow.memberId && !names.has(newRow.memberId))
+            throw new Error('لا يمكن ربط الداتا بعضو خارج فريقك');
+        }
+
+        if(isNew) await apiAdd(key, newRow); else await apiUpdate(key, newRow);
+        if(key==='indoor_leads') await maybeCreateSubscriptionFromLead(newRow);
+        if(key==='subscriptions') await syncSubscriptionGuest(newRow);
+        modalBg.remove();
+        render();
+      }catch(err){
+        console.error(err);
+        alert(err.message || 'تعذر حفظ البيانات');
+        guard.release();
+      }
+    });
+  }
+
+  function renderField(f, row, refOptions){
+    const val = row? (row[f.key]||'') : '';
+    const full = (f.type==='textarea'||f.type==='image') ? 'full':'';
+    let inner = '';
+    if(f.type==='select'){
+      inner = `<select name="${f.key}" ${f.required?'required':''}><option value="">اختر...</option>
+        ${f.options.map(o=>`<option value="${esc(o)}" ${o===val?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+    } else if(f.type==='dynamicSelect'){
+      const opts = refOptions[f.key]||[];
+      inner = `<select name="${f.key}" ${f.required?'required':''}><option value="">اختر...</option>
+        ${opts.map(o=>`<option value="${esc(o)}" ${o===val?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+    } else if(f.type==='linkSelect'){
+      const opts = refOptions[f.key]||[];
+      inner = `<select name="${f.key}" data-linkselect="${f.key}"${f.parentKey?` data-parent-key="${f.parentKey}"`:''}>
+        <option value="">— بدون —</option>
+        ${opts.map(o=>`<option value="${esc(o.id)}" ${String(o.id)===String(val)?'selected':''}>${esc(o.label)}</option>`).join('')}
+      </select>`;
+    } else if(f.type==='textarea'){
+      inner = `<textarea name="${f.key}" rows="3">${esc(val)}</textarea>`;
+    } else if(f.type==='image'){
+      inner = `${val?`<img class="photo-preview" src="${val}"/>`:''}<input type="file" accept="image/*" name="${f.key}"/>`;
+    } else if(f.type==='readonly'){
+      inner = `<input type="text" name="${f.key}" value="${esc(val)}" readonly style="background:#eee;cursor:not-allowed"/>`;
+    } else {
+
+      inner = `<input type="${f.type}" name="${f.key}" value="${esc(val)}" ${f.required?'required':''}/>`;
+    }
+    return `<div class="field ${full}"><label>${esc(f.label)}</label>${inner}</div>`;
+  }
+
+  (function initAuth(){
+    try{
+      const saved=sessionStorage.getItem('homsa_session_user');
+      HOMSA_SESSION=sessionStorage.getItem('homsa_session_token') || '';
+      if(saved && HOMSA_SESSION){
+        try{ state.user = JSON.parse(saved); }catch(_){ state.user=null; }
+      }
+    }catch(e){ console.error('Init error', e); }
+
+    render();
+
+    if(state.user && HOMSA_SESSION){
+      (async function verifySessionInBackground(){
+        try{
+          const data=await authRequest('me',{});
+          if(data.ok){
+            state.user=data.user;
+            sessionStorage.setItem('homsa_session_user', JSON.stringify(data.user));
+          } else {
+            sessionStorage.removeItem('homsa_session_user'); sessionStorage.removeItem('homsa_session_token');
+            HOMSA_SESSION=''; state.user=null; render();
+          }
+        }catch(e){ console.error('Session check error', e); }
+      })();
+    }
+  })();
+})();
+</script>
+</body>
+</html>
