@@ -189,11 +189,14 @@ const TABLE_READ_ROLES = {
   callcenter_payments: ['admin','callcenter','analyst'],
   accommodation: ['admin','accommodation','system','analyst'],
   pr_member_data: ['admin','pr_manager','pr_leader','pr_member','analyst'],
-  subscriptions: ['admin','pr_manager','pr_leader','pr_member','analyst'],
-  trips: ['admin','accommodation','system','pr_manager','pr_leader','pr_member','analyst'],
+  // اتضافلهم accommodation و accounting هنا بس (قراءة فقط) عشان يقدروا يشوفوا
+  // صفحتي "الاشتراكات" و"الفائزون" - صلاحية الكتابة (TABLE_WRITE_ROLES) تحت
+  // ما اتغيرتش، يعني لسه مايقدروش يضيفوا/يعدلوا/يحذفوا فيها.
+  subscriptions: ['admin','pr_manager','pr_leader','pr_member','analyst','accommodation','accounting'],
+  trips: ['admin','accommodation','system','pr_manager','pr_leader','pr_member','analyst','accounting'],
   trip_hotels: ['admin','accommodation','system'],
-  accom_hotels: ['admin','accommodation','system','pr_manager','pr_leader','pr_member','analyst'],
-  accom_rooms: ['admin','accommodation','system','pr_manager','pr_leader','pr_member','analyst'],
+  accom_hotels: ['admin','accommodation','system','pr_manager','pr_leader','pr_member','analyst','accounting'],
+  accom_rooms: ['admin','accommodation','system','pr_manager','pr_leader','pr_member','analyst','accounting'],
   accom_guests: ['admin','accommodation','system'],
   dashboards: ['admin','hr','pr_manager','pr_leader','pr_member','pr_in','pr_out','callcenter','accommodation','system','analyst'],
   widgets: ['admin','hr','pr_manager','pr_leader','pr_member','pr_in','pr_out','callcenter','accommodation','system','analyst'],
