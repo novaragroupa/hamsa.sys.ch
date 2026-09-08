@@ -117,6 +117,7 @@ function doPost(e) {
       const cleanPayload = enforceOwnership(session, table, payload);
       upsertRow(sheet, cleanPayload);
       invalidateCachedRows(table);
+      if (table === 'employees') syncUserTeamFromEmployee(cleanPayload);
 
     } else if (action === 'batchDelete') {
       const ids = (payload.ids || []).map(String).filter(Boolean);
@@ -140,6 +141,7 @@ function doPost(e) {
       });
       upsertRowsBatch(sheet, cleanRows);
       invalidateCachedRows(table);
+      if (table === 'employees') cleanRows.forEach(syncUserTeamFromEmployee);
 
     } else {
       return json({ok:false, error:'Unknown action'}, 400);
@@ -650,6 +652,24 @@ function isPRRole(role) {
   return ['pr_manager','pr_leader','pr_member'].indexOf(role) >= 0;
 }
 
+// طبّع اسم الفريق: بيشيل مسافات البداية/النهاية عشان أي مسافة زيادة اتكتبت غلط
+// في شيت الموظفين (حاجة شائعة جدًا مع الكتابة اليدوية) ما تكسرش مقارنة الفريق.
+function normTeam(v) {
+  return String(v || '').trim();
+}
+
+// فريق المستخدم الحالي "الحقيقي": بنجيبه من صف الموظف نفسه (employees.team) بدل
+// ما نعتمد بس على session.team (اللي مصدرها users.team). السبب: لو حد عدّل فريق
+// موظف من صفحة "الموظفون" بعد ما اتعمله حساب، كان بيتحدث employees.team بس، من
+// غير ما يتحدث users.team بتاع نفس الشخص، فيفضل session.team قديم وغير متزامن.
+// الدالة دي بترجع القيمة الحقيقية الحالية من جدول الموظفين، وترجع لـ session.team
+// بس لو الموظف مش موجود في الجدول أصلاً.
+function sessionOwnTeam(session) {
+  const emps = getCachedRows('employees');
+  const own = emps.find(function(e){ return String(e.id || '') === String(session.employeeId || ''); });
+  return own ? normTeam(own.team) : normTeam(session.team);
+}
+
 function employeeNamesForSession(session) {
   // كان بيقرأ شيت employees بالكامل مباشرة (readRows) في كل مرة، من غير كاش، حتى
   // لو نفس الطلب بيلف على أكتر من جدول (bulk) أو نفس الجلسة بتعمل أكتر من عملية
@@ -659,8 +679,32 @@ function employeeNamesForSession(session) {
   // getCachedRows('employees') المستخدم في باقي النظام (30 ثانية) بدل قراءة مباشرة.
   const emps = getCachedRows('employees');
   if (session.role === 'pr_manager') return emps.map(x => String(x.name || '')).filter(Boolean);
-  return emps.filter(x => String(x.team || '') === String(session.team || '') && x.status !== 'inactive')
+  const myTeam = sessionOwnTeam(session);
+  return emps.filter(x => normTeam(x.team) === myTeam && x.status !== 'inactive')
     .map(x => String(x.name || '')).filter(Boolean);
+}
+
+// لو اتعدل فريق موظف من صفحة "الموظفون"، بنزامن نفس القيمة على حساب تسجيل
+// الدخول بتاعه (users.team) على طول. من غير المزامنة دي، أي فحص صلاحيات بيعتمد
+// على session.team (بما فيه الفحص اللي بيرفض إضافة عضو "برة الفريق") كان ممكن
+// يفضل شغال بقيمة فريق قديمة لحد ما الموظف يعمل logout/login تاني.
+function syncUserTeamFromEmployee(employeeRecord) {
+  if (!employeeRecord || !employeeRecord.id) return;
+  try {
+    const ss = SpreadsheetApp.getActive();
+    const userSheet = ss.getSheetByName('users');
+    if (!userSheet) return;
+    const users = readRows(userSheet);
+    const user = users.find(function(u){ return String(u.employeeId || '') === String(employeeRecord.id); });
+    if (!user) return;
+    const newTeam = normTeam(employeeRecord.team);
+    if (normTeam(user.team) === newTeam) return; // متزامنين بالفعل، مفيش داعي لكتابة زيادة
+    user.team = newTeam;
+    upsertRow(userSheet, user);
+    invalidateCachedRows('users');
+  } catch (e) {
+    // مانوقفش العملية الأساسية (حفظ الموظف) لو المزامنة فشلت لأي سبب
+  }
 }
 
 function serverAnalyticsModulesForRole(role) {
@@ -712,7 +756,7 @@ function filterRowsForSession(rows, table, session) {
   }
 
   if (table === 'teams') {
-    return rows.filter(r => String(r.name || '') === String(session.team || ''));
+    return rows.filter(r => normTeam(r.name) === sessionOwnTeam(session));
   }
 
   if (['indoor_leads','indoor_data','subscriptions'].indexOf(table) >= 0) {
@@ -1039,24 +1083,8 @@ function backfillSubscriptionCodes(sheet) {
 }
 
 /* ---------------- Auto backfill بدون فتح النظام (Trigger مستقل) ---------------- */
-// المشكلة: backfillMissingIds/backfillLeadCodes بتشتغل بس جوه getCachedRows، يعني
-// لازم حد يفتح شاشة المهتمين في النظام عشان تتنفذ. لو حد ضاف صف يدوي في الشيت
-// وماحدش فتح النظام بعده، الصف ده هيفضل من غير id أو code لحد ما حد يفتح الشاشة.
-//
-// الحل: Trigger زمني مستقل (Time-driven) بيشتغل لوحده كل شوية دقايق جوه Google
-// نفسها، بدون أي علاقة بفتح النظام، وبيتأكد من كل الجداول المهمة ويمسح الكاش
-// القديم بتاعها عشان الواجهة تاخد النسخة المحدثة على طول.
-//
-// إزاي تفعّله (مرة واحدة بس):
-// 1) من محرر Apps Script: Triggers (الساعة على الشمال) > Add Trigger
-// 2) Choose which function to run: runAutoBackfillAllSheets
-// 3) Select event source: Time-driven
-// 4) Select type of time based trigger: Minutes timer
-// 5) Select minute interval: Every 5 minutes (أو حسب رغبتك)
-// 6) Save، وهيطلب صلاحيات مرة واحدة بس.
 function runAutoBackfillAllSheets() {
   const ss = SpreadsheetApp.getActive();
-  // ضيف هنا أي جدول محتاج يتراجع تلقائيًا (id لازم لكل الجداول دي، والـ code لـ indoor_leads بس)
   const tablesToCheck = ['indoor_leads', 'indoor_data', 'subscriptions', 'pr_member_data', 'employees', 'teams'];
   tablesToCheck.forEach(function(name){
     const sheet = ss.getSheetByName(name);
@@ -1074,18 +1102,6 @@ function runAutoBackfillAllSheets() {
 }
 
 /* ---------------- Performance: caching + batch ops ---------------- */
-// الهدف: تقليل عدد النداءات للـ Spreadsheet ولسيرفر Apps Script نفسه، لأن
-// كل نداء (حتى لو بسيط) بياخد وقت بدء تشغيل. الكاش هنا مشترك بين كل المستخدمين
-// (ScriptCache) ومدته قصيرة عشان البيانات تفضل حديثة، وبيتم إلغاؤه فورًا بعد أي كتابة.
-//
-// ملاحظة أداء (بخصوص سؤال الـ lag): رفعنا مدة الكاش من 20 إلى 30 ثانية. الفايدة
-// إن الشاشات المتصفحة كتير (زي المهتمين والاشتراكات) هتستغني عن قراءة الشيت من
-// جديد في أول نص دقيقة من كل تعديل. لكن ده تحسين هامشي فقط — السبب الحقيقي في
-// إبطاء النظام مع زيادة البيانات هو أن كل getCachedRows() لما بيفوّت الكاش
-// بيقرأ الشيت بالكامل (getValues على كل الصفوف) وهي عملية O(n) بالنسبة لعدد
-// صفوف الجدول، بالإضافة لوقت "cold start" ثابت لكل تنفيذ لسكريبت Apps Script
-// (~1-3 ثانية) لا يمكن التخلص منه بالكامل من داخل الكود لأنه سلوك بنيوي في
-// خدمة Google Apps Script نفسها. راجع الشرح الكامل في رسالة التسليم.
 const SHEET_CACHE_TTL_SECONDS = 30;
 
 function getCachedRows(sheetName) {
@@ -1099,8 +1115,6 @@ function getCachedRows(sheetName) {
   const ss = SpreadsheetApp.getActive();
   const sheet = ss.getSheetByName(sheetName);
 
-  // نتأكد من الـ id (لكل الجداول) وكود المهتم (لـ indoor_leads فقط) قبل أي قراءة،
-  // عشان يشتغل تلقائيًا حتى لو الصف اتضاف يدويًا في الشيت من غير المرور بالواجهة.
   if (sheet) {
     try { backfillMissingIds(sheet); } catch(_) {}
     if (sheetName === 'indoor_leads') {
@@ -1115,7 +1129,6 @@ function getCachedRows(sheetName) {
 
   try {
     const serialized = JSON.stringify(rows);
-    // CacheService بيرفض القيم اللي أكبر من ~100KB، فبنتجاهل الكاش في الحالة دي بس من غير ما نكسر الطلب
     if (serialized.length < 95000) cache.put(cacheKey, serialized, SHEET_CACHE_TTL_SECONDS);
   } catch (_) { /* تجاهل */ }
 
@@ -1141,7 +1154,6 @@ function upsertRowsBatch(sheet, rows) {
   const idCol = h.indexOf('id');
   const lastRow = sheet.getLastRow();
 
-  // نبني index مرة واحدة بدل ما نقرا عمود الـid من جديد لكل صف (زي ما كان بيحصل قبل كده)
   const idIndex = {};
   if (idCol >= 0 && lastRow > 1) {
     const idValues = sheet.getRange(2, idCol + 1, lastRow - 1, 1).getValues().flat().map(String);
@@ -1173,15 +1185,12 @@ function deleteRowsBatch(sheet, ids) {
   const rowsToDelete = [];
   values.forEach(function(v, i) { if (idSet[v]) rowsToDelete.push(i + 2); });
 
-  // لازم نمسح من الصف الأخير للأول عشان الأرقام متتغيرش تحتنا ونحن بنمسح
   rowsToDelete.sort(function(a, b) { return b - a; });
   rowsToDelete.forEach(function(r) { sheet.deleteRow(r); });
 }
 
 /* ---------------- Sheets CRUD ---------------- */
 
-// اتفصلت من جوه readRows عشان getRowById يقدر يستخدمها على صف واحد بس، من غير
-// ما يحتاج يقرأ الشيت بالكامل.
 function rowValuesToObject(h, row) {
   const obj = {};
   h.forEach((key,i) => {
@@ -1260,12 +1269,6 @@ function upsertRow(sheet, obj) {
 }
 
 function getRowById(sheet, id) {
-  // قبل كده كانت الدالة دي بتقرا عمود الـid لوحده الأول (صح)، وبعدين لو لاقت
-  // الصف، كانت بتنادي readRows(sheet) اللي بيقرا الشيت *بالكامل* (كل الصفوف
-  // وكل الأعمدة) بس عشان تطلع صف واحد منه! ده معناه ضعف عدد القراءات من Sheets
-  // API على كل عملية upsert/delete (اللي هي أكتر عملية بتحصل في النظام)، وكل
-  // ما الجدول يكبر كان بياخد وقت أطول وأطول من غير أي داعي. دلوقتي بنقرا الصف
-  // المطلوب بس (getRange واحدة على صف واحد) بعد ما نلاقي مكانه.
   if (!id || sheet.getLastRow() < 2) return null;
   const h = headers(sheet);
   const idCol = h.indexOf('id') + 1;
