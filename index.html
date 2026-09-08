@@ -8,7 +8,7 @@
 <body>
 <div id="app-root"></div>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Amiri:wght@400;700&display=swap');
 
   :root{
     --navy-900:#0c1f3d;
@@ -25,6 +25,8 @@
     --danger:#b3261e;
     --success:#1a7a4c;
     --warn:#a5690a;
+    --navy-950:#081226;
+    --gold-300:#f8d878;
   }
   *{box-sizing:border-box;}
   #app-root, #app-root *{font-family:'Cairo',sans-serif;}
@@ -33,19 +35,64 @@
   #app-root input, #app-root select, #app-root textarea{font-family:inherit;}
 
   /* ---------- Login ---------- */
-  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;
-    background:radial-gradient(circle at 30% 20%, var(--navy-700), var(--navy-900) 65%);
-    padding:24px;}
-  .login-card{background:#fff;border-radius:20px;width:100%;max-width:400px;overflow:hidden;
-    box-shadow:0 30px 60px rgba(12,31,61,.35);position:relative;}
-  .arch-top{height:110px;background:linear-gradient(160deg,var(--navy-700),var(--navy-900));
-    position:relative;display:flex;align-items:center;justify-content:center;}
-  .arch-top::after{content:"";position:absolute;bottom:-1px;left:50%;transform:translateX(-50%);
-    width:120px;height:60px;background:#fff;border-radius:60px 60px 0 0;}
-  .arch-top img{height:56px;position:relative;z-index:2;margin-top:-10px;background:#fff;border-radius:10px;padding:4px 6px;}
-  .login-body{padding:38px 32px 32px;}
-  .login-body h1{font-size:20px;font-weight:800;margin:0 0 4px;color:var(--navy-900);text-align:center;}
-  .login-body p.sub{text-align:center;color:var(--muted);font-size:13px;margin:0 0 26px;}
+  /* اتعمل التصميم على شكل بوابة على اتنين: يمين مشهد "الأرشيف/المحراب" بلون
+     النظام الأساسي (كحلي/دهبي) نفس هوية اللوجو، وشمال فورم الدخول على خلفية
+     رملية هادية. القوس اللي في اللوجو اتحول لعنصر بصري متكرر (Hero) بدل ما
+     يفضل مجرد لوجو صغير فوق كارت أبيض عادي. */
+  .login-screen{min-height:100vh;display:flex;background:var(--navy-950);}
+  .login-hero{position:relative;flex:1 1 56%;min-height:34vh;overflow:hidden;
+    background:radial-gradient(ellipse at 32% 16%, var(--navy-700) 0%, var(--navy-900) 55%, var(--navy-950) 100%);
+    display:flex;align-items:center;justify-content:center;padding:48px 32px;}
+  .hero-pattern{position:absolute;inset:0;pointer-events:none;
+    background-image:
+      repeating-linear-gradient(45deg, rgba(242,183,5,.08) 0 1px, transparent 1px 48px),
+      repeating-linear-gradient(-45deg, rgba(242,183,5,.08) 0 1px, transparent 1px 48px);
+    -webkit-mask-image:radial-gradient(ellipse at 50% 42%, #000 0%, transparent 76%);
+            mask-image:radial-gradient(ellipse at 50% 42%, #000 0%, transparent 76%);}
+  .hero-content{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;
+    text-align:center;animation:heroIn .9s cubic-bezier(.16,1,.3,1) both;}
+  @keyframes heroIn{from{opacity:0;transform:translateY(14px) scale(.98);}to{opacity:1;transform:none;}}
+  .hero-icon-wrap{position:relative;margin-bottom:24px;display:flex;align-items:center;justify-content:center;}
+  .hero-icon-wrap::before{content:"";position:absolute;width:220px;height:220px;border-radius:50%;
+    background:radial-gradient(circle, rgba(242,183,5,.28), transparent 68%);filter:blur(6px);}
+  .hero-icon-wrap img{position:relative;height:clamp(190px,24vw,270px);
+    filter:drop-shadow(0 16px 30px rgba(0,0,0,.5));}
+  .hero-title{font-family:'Amiri',serif;color:#fff;font-size:clamp(21px,2.4vw,27px);font-weight:700;margin:0 0 12px;}
+  .hero-divider{width:48px;height:2px;background:var(--gold-500);margin:0 0 18px;opacity:.75;}
+  .hero-tagline{font-family:'Amiri',serif;color:var(--gold-300);font-size:clamp(14.5px,1.5vw,16.5px);
+    margin:0;max-width:320px;line-height:1.95;}
+
+  .login-panel{flex:1 1 44%;display:flex;align-items:center;justify-content:center;
+    background:var(--sand-50);padding:48px 28px;}
+  .login-panel-inner{width:100%;max-width:340px;animation:panelIn .9s .15s cubic-bezier(.16,1,.3,1) both;}
+  @keyframes panelIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+  .login-panel-inner h1{font-size:23px;font-weight:800;color:var(--navy-900);margin:0 0 6px;}
+  .login-panel-inner p.sub{color:var(--muted);font-size:13.5px;margin:0 0 30px;line-height:1.7;}
+  .login-field{margin-bottom:22px;}
+  .login-field label{display:block;font-size:12.5px;font-weight:700;color:var(--navy-700);margin-bottom:8px;}
+  .login-field .input-line{position:relative;}
+  .login-field .input-line::after{content:"";position:absolute;right:0;bottom:-1.5px;width:0;height:2px;
+    background:var(--gold-500);transition:width .25s ease;}
+  .login-field .input-line:focus-within::after{width:100%;}
+  .login-field input{width:100%;padding:9px 2px;border:none;border-bottom:1.5px solid var(--line);
+    background:transparent;font-size:15px;color:var(--ink);}
+  .login-field input:focus{outline:none;}
+  .login-submit{width:100%;padding:13px;margin-top:10px;background:var(--navy-900);color:#fff;
+    border-radius:10px;font-weight:700;font-size:15px;transition:background .15s, transform .08s;}
+  .login-submit:hover{background:var(--gold-500);color:var(--navy-900);}
+  .login-submit:active{transform:scale(.98);}
+  .login-submit:focus-visible{outline:2px solid var(--gold-500);outline-offset:2px;}
+  .login-foot{text-align:center;font-size:12px;color:var(--muted);margin-top:28px;}
+  @media (max-width:820px){
+    .login-screen{flex-direction:column;}
+    .login-hero{min-height:30vh;padding:34px 24px;}
+    .hero-icon-wrap img{height:140px;}
+    .hero-tagline{display:none;}
+    .login-panel{padding:36px 22px 52px;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .hero-content,.login-panel-inner{animation:none;}
+  }
   .field{margin-bottom:16px;}
   .field label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--navy-800);}
   .field input, .field select, .field textarea{width:100%;padding:11px 14px;border:1.5px solid var(--line);
@@ -58,7 +105,7 @@
   .btn-gold{background:var(--gold-500);color:var(--navy-900);}
   .btn-gold:hover{background:var(--gold-600);}
   .error-box{background:#fdeceb;color:var(--danger);padding:10px 14px;border-radius:8px;font-size:13px;
-    margin-bottom:16px;text-align:center;}
+    margin-bottom:20px;text-align:center;border-right:3px solid var(--danger);}
 
   /* ---------- Shell ---------- */
   .shell{display:flex;min-height:100vh;}
@@ -537,12 +584,6 @@
     const out={}; keys.forEach(k=>out[k]=cache[k]||[]); return out;
   }
 
-  // تحميل مسبق في الخلفية: بعد ما اليوزر يعمل لوجين، بنجيب كل الجداول اللي دوره
-  // يقدر يشوفها بنداء واحد (bulk) من غير ما نستنى النتيجة (مش await في مكان الاستدعاء)،
-  // عشان لما يدوس على أي قسم بعد كده، البيانات تبقى موجودة في الكاش جاهزة على طول
-  // من غير ما يستنى نداء جديد لـ Apps Script (وده أكبر سبب في حس التقيل عند التنقل
-  // بين الصفحات). لو النداء فشل لأي سبب، مفيش أي تأثير على الشغل العادي — كل صفحة
-  // لسه بتجيب بياناتها بنفسها لما تتفتح زي ما كانت بالظبط.
   async function prefetchAllData(){
     try{
       const role = state.user && state.user.role;
@@ -569,9 +610,6 @@
 
   function uid(){ return 'id'+Math.random().toString(36).slice(2,10); }
   function esc(s){ return (s===undefined||s===null)?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-  // أداة debounce عامة: بتأجل تنفيذ الدالة لحد ما المستخدم يوقف عن الكتابة/الضغط
-  // لمدة `wait` مللي ثانية. بنستخدمها في خانات البحث عشان منعملش إعادة رسم كاملة
-  // للجدول مع كل حرف يتكتب (وده كان أكبر سبب لاج محسوس أثناء الكتابة).
   function debounce(fn, wait){
     let t;
     return function(...args){
@@ -626,6 +664,10 @@
 
   /* ---------------- PR access control ---------------- */
   function isPRUser(){ return ['pr_manager','pr_leader','pr_member'].includes(state.user?.role); }
+  // طبّع اسم الفريق: بيشيل مسافات البداية/النهاية عشان أي مسافة زيادة اتكتبت
+  // غلط في شيت الموظفين ما تكسرش مقارنة الفريق. نفس الدالة موجودة في السيرفر
+  // (Apps Script) عشان مقارنة الفريق تبقى متطابقة تمامًا بين الواجهة والسيرفر.
+  function normTeam(v){ return String(v||'').trim(); }
   function currentEmployee(){
     if(!state.user) return null;
     const list = cache.employees || [];
@@ -639,13 +681,13 @@
   }
   async function prTeamName(){
     const emp=await currentEmployeeFresh();
-    return emp?.team || state.user?.team || '';
+    return normTeam(emp?.team || state.user?.team || '');
   }
   async function prTeamMembers(){
     const emps=await getData('employees');
     if(state.user.role==='pr_manager') return emps.filter(e=>e.status!=='inactive');
     const team=await prTeamName();
-    return emps.filter(e=>e.status!=='inactive' && e.team===team);
+    return emps.filter(e=>e.status!=='inactive' && normTeam(e.team)===team);
   }
   async function prAllowedNames(){
     const members=await prTeamMembers();
@@ -660,7 +702,7 @@
     if(key==='employees') return data.filter(r=>teamNames.has(r.name));
     if(key==='teams') {
       const team=await prTeamName();
-      return data.filter(r=>r.name===team);
+      return data.filter(r=>normTeam(r.name)===team);
     }
     if(key==='indoor_leads' || key==='indoor_data' || key==='subscriptions'){
       return data.filter(r=>teamNames.has(r.responsiblePerson) && (state.user.role==='pr_leader' || r.responsiblePerson===myName));
@@ -747,18 +789,31 @@
 
   function renderLogin(){
     root.innerHTML = `
-      <div class="login-wrap">
-        <div class="login-card">
-          <div class="arch-top"><img src="${LOGO}" alt="همسة"/></div>
-          <div class="login-body">
-            <h1>نظام إدارة همسة للسياحة</h1>
-            <p class="sub">سجّل دخولك للمتابعة</p>
+      <div class="login-screen">
+        <div class="login-hero">
+          <div class="hero-pattern"></div>
+          <div class="hero-content">
+            <div class="hero-icon-wrap"><img src="logo-mark.png" alt="همسة للسياحة"/></div>
+            <h2 class="hero-title">همسة للسياحة</h2>
+            <div class="hero-divider"></div>
+            <p class="hero-tagline">رفقاؤكم في كل خطوة نحو بيت الله الحرام</p>
+          </div>
+        </div>
+        <div class="login-panel">
+          <div class="login-panel-inner">
+            <h1>تسجيل الدخول</h1>
+            <p class="sub">أدخل بيانات حسابك للمتابعة إلى نظام إدارة همسة</p>
             ${state.loginError? `<div class="error-box">${esc(state.loginError)}</div>`:''}
             <form id="login-form">
-              <div class="field"><label>اسم المستخدم</label><input id="login-u" type="text" autocomplete="username" required/></div>
-              <div class="field"><label>كلمة المرور</label><input id="login-p" type="password" autocomplete="current-password" required/></div>
-              <button class="btn-primary btn-gold" type="submit">تسجيل الدخول</button>
+              <div class="login-field"><label>اسم المستخدم</label>
+                <div class="input-line"><input id="login-u" type="text" autocomplete="username" required/></div>
+              </div>
+              <div class="login-field"><label>كلمة المرور</label>
+                <div class="input-line"><input id="login-p" type="password" autocomplete="current-password" required/></div>
+              </div>
+              <button class="login-submit" type="submit">دخول</button>
             </form>
+            <div class="login-foot">تواجه مشكلة في الدخول؟ تواصل مع مسؤول النظام</div>
           </div>
         </div>
       </div>`;
@@ -2203,10 +2258,6 @@
       document.getElementById('add-btn').addEventListener('click', ()=> key==='employees' ? openEmployeeAccountForm() : openForm(key, null));
     }
 
-    // بنحسب نص البحث لكل صف مرة واحدة بس هنا عند فتح الصفحة (مش مع كل حرف يتكتب)،
-    // فالفلترة أثناء الكتابة بقت مجرد .includes() سريع على نص جاهز بدل إعادة
-    // بناء النص من كل حقول الصف وكل الـ linkMaps مع كل ضغطة — وده كان أكبر سبب لاج
-    // ملموس أثناء الكتابة في جداول فيها مئات الصفوف (زي الاشتراكات والمهتمين).
     const searchIndex = data.map(row=>({row, text: rowSearchText(mod, row, linkMaps)}));
     const filterBySearchIndex = (term)=>{
       term = (term||'').trim().toLowerCase();
@@ -2218,8 +2269,6 @@
 
     const searchInput = document.getElementById('module-search-input');
     if(searchInput){
-      // debounce: بنستنى المستخدم يوقف عن الكتابة 180ms قبل إعادة رسم الجدول،
-      // بدل ما نعيد الرسم الكامل (وإعادة ربط كل الأزرار) مع كل حرف يتكتب.
       let debounceTimer;
       searchInput.addEventListener('input', ()=>{
         state.moduleSearch[key] = searchInput.value;
@@ -2234,8 +2283,6 @@
     }
   }
 
-  // نص قابل للبحث فيه لكل صف: بيحوّل القيم المرتبطة (linkSelect/كود العميل) لنصها
-  // الظاهر للمستخدم بدل الـ id الداخلي، عشان البحث يشتغل بالاسم اللي المستخدم شايفه فعليًا.
   function rowSearchText(mod, row, linkMaps){
     const parts = mod.fields.map(f=>{
       const v = row[f.key];
