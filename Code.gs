@@ -196,10 +196,10 @@ const TABLE_READ_ROLES = {
   // ما اتغيرتش، يعني لسه مايقدروش يضيفوا/يعدلوا/يحذفوا فيها.
   subscriptions: ['admin','pr_manager','pr_leader','pr_member','analyst','accommodation','accounting'],
   trips: ['admin','accommodation','system','pr_manager','pr_leader','pr_member','analyst','accounting'],
-  trip_hotels: ['admin','accommodation','system'],
+  trip_hotels: ['admin','accommodation','system','pr_manager','pr_leader','pr_member','accounting'],
   accom_hotels: ['admin','accommodation','system','pr_manager','pr_leader','pr_member','analyst','accounting'],
   accom_rooms: ['admin','accommodation','system','pr_manager','pr_leader','pr_member','analyst','accounting'],
-  accom_guests: ['admin','accommodation','system'],
+  accom_guests: ['admin','accommodation','system','pr_manager','pr_leader','pr_member','accounting'],
   dashboards: ['admin','hr','pr_manager','pr_leader','pr_member','pr_in','pr_out','callcenter','accommodation','system','analyst'],
   widgets: ['admin','hr','pr_manager','pr_leader','pr_member','pr_in','pr_out','callcenter','accommodation','system','analyst'],
   accounting: ['admin'],
@@ -217,7 +217,7 @@ const TABLE_WRITE_ROLES = {
   callcenter_payments: ['admin','callcenter'],
   accommodation: ['admin','accommodation','system'],
   pr_member_data: ['admin','pr_manager','pr_leader','pr_member'],
-  subscriptions: ['admin','pr_manager','pr_leader','pr_member'],
+  subscriptions: ['admin','pr_manager','pr_leader','pr_member','accommodation'],
   trips: ['admin','accommodation','system'],
   trip_hotels: ['admin','accommodation','system'],
   accom_hotels: ['admin','accommodation','system'],
@@ -804,6 +804,7 @@ function rowBelongsToSession(session, table, row) {
 
   if (['indoor_leads','indoor_data','subscriptions'].indexOf(table) >= 0) {
     if (session.role === 'pr_manager') return true;
+    if (session.role === 'accommodation' && table === 'subscriptions') return true;
     const allowed = employeeNamesForSession(session);
     const owner = String(row.responsiblePerson || '');
     return session.role === 'pr_leader' ? allowed.indexOf(owner) >= 0 : owner === String(session.name || '');
@@ -833,6 +834,13 @@ function canMutateTable(session, table, payload, action) {
   if (table === 'users') return false;
 
   if (!isTableWriteAllowed(session, table)) return false;
+
+  // التسكين مسموحله بس يعدّل (تعيين رحلة/فندق/غرفة) على مشترك موجود بالفعل —
+  // ممنوع يضيف مشترك جديد أو يحذف أو يعمل batch. enforceOwnership تحت بتقصر
+  // التعديل على حقول tripId/hotelId/roomId بس، وبتمنع الإضافة لو الصف مش موجود.
+  if (session.role === 'accommodation' && table === 'subscriptions') {
+    return action === 'upsert';
+  }
 
   if (['dashboards','widgets'].indexOf(table) >= 0) {
     if (!ANALYTICS_ROLES.includes(String(session.role || ''))) return false;
@@ -926,6 +934,21 @@ function canMutateTable(session, table, payload, action) {
 
 function enforceOwnership(session, table, payload) {
   const p = Object.assign({}, payload || {});
+
+  // التسكين: نتجاهل أي حقل تاني غير الرحلة/الفندق/الغرفة، ونمنع إنشاء مشترك جديد.
+  if (session.role === 'accommodation' && table === 'subscriptions') {
+    const existing = getCachedRows('subscriptions').find(function(r){
+      return String(r.id || '') === String(p.id || '');
+    });
+    if (!existing) throw new Error('غير مسموح بإضافة مشترك جديد — التسكين يقدر بس يعيّن رحلة/فندق/غرفة لمشترك موجود');
+    const allowedFields = ['tripId','hotelId','roomId'];
+    const merged = Object.assign({}, existing);
+    allowedFields.forEach(function(k){
+      if (Object.prototype.hasOwnProperty.call(p, k)) merged[k] = p[k];
+    });
+    return merged;
+  }
+
   const allowed = employeeNamesForSession(session);
   const myName = session.name || '';
 
