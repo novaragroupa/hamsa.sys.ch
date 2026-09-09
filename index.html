@@ -372,7 +372,7 @@
         {key:'lastContactDate', label:'آخر متابعة', type:'date'},
         {key:'notes', label:'ملاحظات', type:'textarea'},
       ]},
-    accommodation:{ title:'التسكين', icon:'🏨', roles:['admin','accommodation','system'],
+    accommodation:{ title:'التسكين', icon:'🏨', roles:['admin','accommodation','system','accounting','pr_manager','pr_leader','pr_member'],
       fields:[
         {key:'clientName', label:'اسم العميل', type:'text', required:true},
         {key:'passportNumber', label:'رقم الجواز', type:'text'},
@@ -382,7 +382,7 @@
         {key:'hotel', label:'الفندق', type:'text'},
         {key:'flightStatus', label:'حالة حجز الطيران', type:'select', options:['لم يُحجز','تم الحجز']},
       ]},
-    trips_hub:{ title:'الرحلات', icon:'🧳', roles:['admin','accommodation','system'],
+    trips_hub:{ title:'الرحلات', icon:'🧳', roles:['admin','accommodation','system','accounting','pr_manager','pr_leader','pr_member'],
       fields:[]},
 
     pr_member_data:{ title:'الداتا والأرقام واللينكات', icon:'🔗', roles:['admin','pr_manager','pr_leader','pr_member'],
@@ -664,6 +664,7 @@
 
   /* ---------------- PR access control ---------------- */
   function isPRUser(){ return ['pr_manager','pr_leader','pr_member'].includes(state.user?.role); }
+  function canManageAccommodation(){ return ['admin','accommodation','system'].includes(state.user.role); }
   // طبّع اسم الفريق: بيشيل مسافات البداية/النهاية عشان أي مسافة زيادة اتكتبت
   // غلط في شيت الموظفين ما تكسرش مقارنة الفريق. نفس الدالة موجودة في السيرفر
   // (Apps Script) عشان مقارنة الفريق تبقى متطابقة تمامًا بين الواجهة والسيرفر.
@@ -1567,7 +1568,7 @@
     const rooms = await getData('accom_rooms');
     page.innerHTML = `
       <div class="page-head"><h2>🏨 التسكين — الفنادق</h2>
-        <button class="btn-primary btn-gold" id="add-hotel-standalone-btn" style="width:auto;padding:10px 20px;">+ إضافة فندق</button>
+        ${canManageAccommodation()? `<button class="btn-primary btn-gold" id="add-hotel-standalone-btn" style="width:auto;padding:10px 20px;">+ إضافة فندق</button>`:''}
       </div>
       <div class="assumption-note">هذا القسم مستقل تمامًا عن الرحلات: إضافة أو تعديل أو حذف أي رحلة من قسم "الرحلات" لن يؤثر على الفنادق أو الغرف هنا إطلاقًا. لربط فندق موجود برحلة معينة استخدم قسم "الرحلات".</div>
       <div class="card">
@@ -1577,12 +1578,12 @@
             <div class="cnt">🏨</div><div class="nm">${esc(h.name)}</div>
             <div class="nm" style="color:var(--muted);">${esc(h.location||'')}</div>
             <div class="nm" style="color:var(--navy-700);font-weight:700;">${roomsCnt} غرفة</div>
-            <button class="icon-btn" data-edithotel="${h.id}" style="margin-top:6px;">✏️ تعديل</button>
-            <button class="icon-btn del" data-delhotelstd="${h.id}" style="margin-top:6px;">🗑️ حذف</button>
+            ${canManageAccommodation()? `<button class="icon-btn" data-edithotel="${h.id}" style="margin-top:6px;">✏️ تعديل</button>
+             <button class="icon-btn del" data-delhotelstd="${h.id}" style="margin-top:6px;">🗑️ حذف</button>`:''}
           </div>`;
         }).join('')}</div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد فنادق بعد — ابدأ بالإضافة</div>`}
       </div>`;
-    document.getElementById('add-hotel-standalone-btn').addEventListener('click', ()=>openStandaloneHotelForm(null));
+    document.getElementById('add-hotel-standalone-btn')?.addEventListener('click', ()=>openStandaloneHotelForm(null));
     page.querySelectorAll('[data-hotel]').forEach(el=>el.addEventListener('click', (e)=>{
       if(e.target.closest('[data-edithotel]') || e.target.closest('[data-delhotelstd]')) return;
       state.accomSecHotelId = el.dataset.hotel; state.accomSecView='rooms'; render();
@@ -1644,7 +1645,7 @@
     const trips = await getData('trips');
     page.innerHTML = `
       <div class="page-head"><h2>🛏️ غرف فندق ${esc(hotel.name)}</h2>
-        <button class="btn-primary btn-gold" id="add-room-std-btn" style="width:auto;padding:10px 20px;">+ إضافة غرفة</button>
+        ${canManageAccommodation()? `<button class="btn-primary btn-gold" id="add-room-std-btn" style="width:auto;padding:10px 20px;">+ إضافة غرفة</button>`:''}
       </div>
       ${crumbsBar([{label:'الفنادق'},{label:hotel.name}])}
       <div class="card">
@@ -1674,15 +1675,15 @@
                 <span class="badge ${over?'red':'green'}">${cnt} / ${cap}</span></h3>
               <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
                 <span style="font-size:12.5px;color:var(--muted);">الإتاحة: ${esc(r.availableFrom||'—')} → ${esc(r.availableTo||'—')}</span>
-                <button class="icon-btn" data-editroomstd="${r.id}">✏️ تعديل</button>
-                <button class="icon-btn del" data-delroomstd="${r.id}">🗑️ حذف</button>
+                ${canManageAccommodation()? `<button class="icon-btn" data-editroomstd="${r.id}">✏️ تعديل</button>
+                 <button class="icon-btn del" data-delroomstd="${r.id}">🗑️ حذف</button>`:''}
               </div>
             </div>
             ${guestsTableHtml}
           </div>`;
         }).join('') : `<div class="empty-state"><div class="big">📭</div>لا توجد غرف مضافة لهذا الفندق</div>`}
       </div>`;
-    document.getElementById('add-room-std-btn').addEventListener('click', ()=>openStandaloneRoomForm(hotel.id, null, ()=>render()));
+    document.getElementById('add-room-std-btn')?.addEventListener('click', ()=>openStandaloneRoomForm(hotel.id, null, ()=>render()));
     bindCrumbs(page, [ ()=>{ state.accomSecView='hotels'; render(); }, ()=>{} ]);
     page.querySelectorAll('[data-editroomstd]').forEach(b=>b.addEventListener('click', ()=>openStandaloneRoomForm(hotel.id, b.dataset.editroomstd, ()=>render())));
     page.querySelectorAll('[data-delroomstd]').forEach(b=>b.addEventListener('click', async ()=>{
@@ -1746,7 +1747,7 @@
     const links = await getData('trip_hotels');
     page.innerHTML = `
       <div class="page-head"><h2>🧳 الرحلات</h2>
-        <button class="btn-primary btn-gold" id="add-trip-btn" style="width:auto;padding:10px 20px;">+ إضافة رحلة</button>
+        ${canManageAccommodation()? `<button class="btn-primary btn-gold" id="add-trip-btn" style="width:auto;padding:10px 20px;">+ إضافة رحلة</button>`:''}
       </div>
       <div class="assumption-note">حذف رحلة من هنا يحذف الرحلة فقط وربطها بالفنادق ونزلائها في هذه الرحلة تحديدًا — الفنادق والغرف نفسها تبقى كما هي في قسم "التسكين" ويمكن استخدامها في رحلات أخرى.</div>
       <div class="card">
@@ -1756,12 +1757,12 @@
             <div class="cnt">🧳</div><div class="nm">${esc(t.label||'رحلة')}</div>
             <div class="nm" style="color:var(--navy-700);font-weight:700;">${esc(t.date||'')}</div>
             <div class="nm" style="color:var(--muted);font-size:11px;">${hCnt} فندق مرتبط</div>
-            <button class="icon-btn" data-edittrip="${t.id}" style="margin-top:6px;">✏️ تعديل</button>
-            <button class="icon-btn del" data-deltrip="${t.id}" style="margin-top:6px;">🗑️ حذف الرحلة فقط</button>
+            ${canManageAccommodation()? `<button class="icon-btn" data-edittrip="${t.id}" style="margin-top:6px;">✏️ تعديل</button>
+             <button class="icon-btn del" data-deltrip="${t.id}" style="margin-top:6px;">🗑️ حذف الرحلة فقط</button>`:''}
           </div>`;
         }).join('')}</div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد رحلات بعد — ابدأ بالإضافة</div>`}
       </div>`;
-    document.getElementById('add-trip-btn').addEventListener('click', ()=>openTripFormNew(null));
+    document.getElementById('add-trip-btn')?.addEventListener('click', ()=>openTripFormNew(null));
     page.querySelectorAll('[data-trip]').forEach(el=>el.addEventListener('click', (e)=>{
       if(e.target.closest('[data-edittrip]') || e.target.closest('[data-deltrip]')) return;
       state.tripsHubTripId = el.dataset.trip; state.tripsHubView='hotels'; render();
@@ -1820,7 +1821,7 @@
     page.innerHTML = `
       <div class="page-head">
         <h2>🏨 فنادق رحلة ${esc(trip.label||'')} — ${esc(trip.date||'')}</h2>
-        <button class="btn-primary btn-gold" id="link-hotel-btn" style="width:auto;padding:10px 20px;">+ ربط فندق بالرحلة</button>
+        ${canManageAccommodation()? `<button class="btn-primary btn-gold" id="link-hotel-btn" style="width:auto;padding:10px 20px;">+ ربط فندق بالرحلة</button>`:''}
       </div>
       ${crumbsBar([{label:'الرحلات'},{label:(trip.label||trip.date||'الفندق')}])}
       <div class="card">
@@ -1832,11 +1833,11 @@
             <div class="cnt">🏨</div><div class="nm">${esc(h.name)}</div>
             <div class="nm" style="color:var(--muted);">${esc(h.location||'')}</div>
             <div class="nm" style="color:var(--navy-700);font-weight:700;">${roomsCnt} غرفة</div>
-            <button class="icon-btn del" data-unlink="${l.id}" style="margin-top:6px;">✖ إلغاء الربط بالرحلة</button>
+            ${canManageAccommodation()? `<button class="icon-btn del" data-unlink="${l.id}" style="margin-top:6px;">✖ إلغاء الربط بالرحلة</button>`:''}
           </div>`;
         }).join('')}</div>` : `<div class="empty-state"><div class="big">📭</div>لا يوجد فنادق مرتبطة بهذه الرحلة بعد</div>`}
       </div>`;
-    document.getElementById('link-hotel-btn').addEventListener('click', ()=>openLinkHotelToTripForm(trip.id, links.map(l=>l.hotelId)));
+    document.getElementById('link-hotel-btn')?.addEventListener('click', ()=>openLinkHotelToTripForm(trip.id, links.map(l=>l.hotelId)));
     bindCrumbs(page, [ ()=>{ state.tripsHubView='trips'; render(); }, ()=>{} ]);
     page.querySelectorAll('[data-link]').forEach(el=>el.addEventListener('click', (e)=>{
       if(e.target.closest('[data-unlink]')) return;
@@ -1916,7 +1917,7 @@
     page.innerHTML = `
       <div class="page-head">
         <h2>🛏️ غرف فندق ${esc(hotel.name)} — رحلة ${esc(trip.label||trip.date||'')}</h2>
-        <button class="btn-primary btn-gold" id="add-room-trip-btn" style="width:auto;padding:10px 20px;">+ إضافة غرفة لهذا الفندق</button>
+        ${canManageAccommodation()? `<button class="btn-primary btn-gold" id="add-room-trip-btn" style="width:auto;padding:10px 20px;">+ إضافة غرفة لهذا الفندق</button>`:''}
       </div>
       ${crumbsBar([{label:'الرحلات'},{label:(trip.label||trip.date)},{label:hotel.name}])}
       <div class="assumption-note">الغرف هنا تابعة للفندق نفسه (مش خاصة بالرحلة)، ويمكن استخدام نفس الغرفة في رحلات أخرى بتواريخ مختلفة. عدد النزلاء المعروض هنا خاص بنزلاء هذه الرحلة فقط.</div>
@@ -1933,7 +1934,7 @@
           </div>`;
         }).join('')}</div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد غرف في هذا الفندق بعد</div>`}
       </div>`;
-    document.getElementById('add-room-trip-btn').addEventListener('click', ()=>openStandaloneRoomForm(hotel.id, null, ()=>render()));
+    document.getElementById('add-room-trip-btn')?.addEventListener('click', ()=>openStandaloneRoomForm(hotel.id, null, ()=>render()));
     bindCrumbs(page, [ ()=>{ state.tripsHubView='trips'; render(); }, ()=>{ state.tripsHubView='hotels'; render(); }, ()=>{} ]);
     page.querySelectorAll('[data-room]').forEach(el=>el.addEventListener('click', ()=>{
       state.tripsHubRoomId = el.dataset.room; state.tripsHubView='guests'; render();
@@ -1954,7 +1955,7 @@
     page.innerHTML = `
       <div class="page-head">
         <h2>👤 نزلاء غرفة ${esc(room.roomNumber||'')} — ${esc(hotel?hotel.name:'')} — رحلة ${esc(trip.label||trip.date||'')}</h2>
-        <button class="btn-primary btn-gold" id="add-guest-trip-btn" style="width:auto;padding:10px 20px;">+ إضافة نزيل</button>
+        ${canManageAccommodation()? `<button class="btn-primary btn-gold" id="add-guest-trip-btn" style="width:auto;padding:10px 20px;">+ إضافة نزيل</button>`:''}
       </div>
       ${crumbsBar([{label:'الرحلات'},{label:(trip.label||trip.date)},{label:(hotel?hotel.name:'')},{label:'غرفة '+(room.roomNumber||'')}])}
       ${guests.length>cap? `<div class="assumption-note" style="background:#fdeceb;border-color:#f3c6c2;color:var(--danger);">تنبيه: عدد النزلاء (${guests.length}) أكبر من سعة الغرفة (${cap}) في هذه الرحلة</div>`:''}
@@ -1964,10 +1965,10 @@
           <tbody>${guests.map(g=>`<tr>
             <td>${esc(g.name)}</td><td>${esc(g.nationalId)}</td><td>${esc(g.passportNumber)}</td><td>${esc(g.phone)}</td>
             <td>${fieldDisplay({key:'flightStatus'}, g.flightStatus)}</td>
-            <td><button class="icon-btn" data-editg="${g.id}">✏️</button><button class="icon-btn del" data-delg="${g.id}">🗑️</button></td>
+            <td>${canManageAccommodation()? `<button class="icon-btn" data-editg="${g.id}">✏️</button><button class="icon-btn del" data-delg="${g.id}">🗑️</button>`:''}</td>
           </tr>`).join('')}</tbody></table></div>` : `<div class="empty-state"><div class="big">📭</div>لا يوجد نزلاء بعد في هذه الغرفة لهذه الرحلة</div>`}
       </div>`;
-    document.getElementById('add-guest-trip-btn').addEventListener('click', ()=>openTripGuestForm(trip.id, room.id, null));
+    document.getElementById('add-guest-trip-btn')?.addEventListener('click', ()=>openTripGuestForm(trip.id, room.id, null));
     bindCrumbs(page, [ ()=>{ state.tripsHubView='trips'; render(); }, ()=>{ state.tripsHubView='hotels'; render(); },
       ()=>{ state.tripsHubView='rooms'; render(); }, ()=>{} ]);
     page.querySelectorAll('[data-editg]').forEach(b=>b.addEventListener('click', ()=>openTripGuestForm(trip.id, room.id, b.dataset.editg)));
@@ -2142,12 +2143,70 @@
     }
   }
 
+  function subsHotelsForTrip(tripId){
+    if(!tripId) return [];
+    const tripHotels = (cache.trip_hotels||[]).filter(th=>String(th.tripId)===String(tripId));
+    const hotels = cache.accom_hotels||[];
+    const ids = tripHotels.map(th=>th.hotelId);
+    return hotels.filter(h=>ids.includes(h.id));
+  }
+  function subsRoomsForHotel(hotelId){
+    if(!hotelId) return [];
+    return (cache.accom_rooms||[]).filter(r=>r.hotelId===hotelId);
+  }
+  function renderAccommodationAssignRow(mod, row, linkMaps){
+    const hotels = subsHotelsForTrip(row.tripId);
+    const rooms = subsRoomsForHotel(row.hotelId);
+    const trips = cache.trips||[];
+    return `<tr>${mod.fields.map(f=>{
+      if(f.key==='tripId'){
+        return `<td><select class="assign-select assign-trip" data-id="${esc(row.id)}">
+          <option value="">— بدون —</option>
+          ${trips.map(t=>`<option value="${esc(t.id)}" ${String(t.id)===String(row.tripId||'')?'selected':''}>${esc(linkLabel('trips',t))}</option>`).join('')}
+        </select></td>`;
+      }
+      if(f.key==='hotelId'){
+        return `<td><select class="assign-select assign-hotel" data-id="${esc(row.id)}" ${!row.tripId?'disabled':''}>
+          <option value="">— بدون —</option>
+          ${hotels.map(h=>`<option value="${esc(h.id)}" ${String(h.id)===String(row.hotelId||'')?'selected':''}>${esc(linkLabel('accom_hotels',h))}</option>`).join('')}
+        </select></td>`;
+      }
+      if(f.key==='roomId'){
+        return `<td><select class="assign-select assign-room" data-id="${esc(row.id)}" ${!row.hotelId?'disabled':''}>
+          <option value="">— بدون —</option>
+          ${rooms.map(r=>`<option value="${esc(r.id)}" ${String(r.id)===String(row.roomId||'')?'selected':''}>${esc(linkLabel('accom_rooms',r))}</option>`).join('')}
+        </select></td>`;
+      }
+      return `<td>${fieldDisplay(f,row[f.key],linkMaps,row)}</td>`;
+    }).join('')}<td></td></tr>`;
+  }
+  function bindAccommodationAssignEvents(container, visibleData){
+    const handle=(sel, buildUpdate)=>{
+      sel.addEventListener('change', async ()=>{
+        const row = visibleData.find(r=>String(r.id)===String(sel.dataset.id));
+        if(!row) return;
+        sel.disabled = true;
+        try{
+          const updated = buildUpdate(row, sel.value);
+          await apiUpdate('subscriptions', updated);
+          await syncSubscriptionGuest(updated);
+          render();
+        }catch(err){
+          console.error(err); alert(err.message||'تعذر الحفظ'); sel.disabled=false;
+        }
+      });
+    };
+    container.querySelectorAll('.assign-trip').forEach(sel=>handle(sel,(row,val)=>({...row, tripId:val, hotelId:'', roomId:''})));
+    container.querySelectorAll('.assign-hotel').forEach(sel=>handle(sel,(row,val)=>({...row, hotelId:val, roomId:''})));
+    container.querySelectorAll('.assign-room').forEach(sel=>handle(sel,(row,val)=>({...row, roomId:val})));
+  }
+
   /* ---------------- Generic module CRUD renderer ---------------- */
   async function renderModule(page, key){
     const mod = MODULES[key];
     if(!mod || !mod.roles.includes(state.user.role)) return;
     const linkRefs = mod.fields.filter(f=>f.type==='linkSelect').map(f=>f.ref);
-    const extraRefs = key==='subscriptions' ? ['indoor_leads'] : [];
+    const extraRefs = key==='subscriptions' ? ['indoor_leads','trip_hotels'] : [];
     await getDataMany([key, ...((isPRUser()||key==='visits')?['employees']:[]), ...linkRefs, ...extraRefs]);
     const allData = await getData(key);
     let data = await filterPRData(key, allData);
@@ -2212,8 +2271,10 @@
     // بنحدد الحالة دي بدقة عشان أي دور تاني (PR، أدمن، إلخ) يفضل شغال بالظبط
     // زي ما كان قبل كده من غير أي تغيير في زرار الإضافة بتاعه على أي موديول.
     const canWriteModule = !(['accommodation','accounting'].includes(state.user.role) && key==='subscriptions');
+    const canAssignTrip = key==='subscriptions' && state.user.role==='accommodation';
 
     const bindTableEvents = (container, visibleData)=>{
+      if(canAssignTrip){ bindAccommodationAssignEvents(container, visibleData); return; }
       container.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click', ()=>{
         const row=visibleData.find(r=>String(r.id)===String(b.dataset.edit));
         if(prCanEditRow(key,row)) openForm(key,b.dataset.edit); else alert('ليس لديك صلاحية لتعديل هذه البيانات');
@@ -2237,7 +2298,7 @@
       if(!visibleData.length) return `<div class="empty-state"><div class="big">🔍</div>لا توجد نتائج مطابقة للبحث</div>`;
       return `<div class="table-wrap"><table>
           <thead><tr>${mod.fields.map(f=>`<th>${esc(f.label)}</th>`).join('')}<th></th></tr></thead>
-          <tbody>${visibleData.map(row=>renderRow(mod,row,linkMaps,canWriteModule)).join('')}</tbody>
+          <tbody>${visibleData.map(row=> canAssignTrip? renderAccommodationAssignRow(mod,row,linkMaps) : renderRow(mod,row,linkMaps,canWriteModule)).join('')}</tbody>
         </table></div>`;
     };
 
@@ -2247,7 +2308,8 @@
         ${canWriteModule ? `<button class="btn-primary btn-gold" id="add-btn" style="width:auto;padding:10px 20px;">+ إضافة</button>` : ''}
       </div>
       ${isPRUser() && state.user.role!=='pr_manager' ? `<div class="assumption-note">البيانات المعروضة هنا خاصة بنطاق صلاحيتك. لا يتم عرض بيانات أعضاء العلاقات العامة الآخرين.</div>`:''}
-      ${!canWriteModule ? `<div class="assumption-note">عرض فقط: ليس لديك صلاحية إضافة أو تعديل أو حذف بيانات هنا.</div>`:''}
+      ${!canWriteModule && !canAssignTrip ? `<div class="assumption-note">عرض فقط: ليس لديك صلاحية إضافة أو تعديل أو حذف بيانات هنا.</div>`:''}
+      ${canAssignTrip ? `<div class="assumption-note">تقدر هنا تحدد الرحلة والفندق والغرفة لكل مشترك فقط — باقي بيانات المشترك للعرض.</div>`:''}
       ${data.length? `<div class="card" style="padding:14px 20px;margin-bottom:14px;">
         <input type="text" id="module-search-input" placeholder="🔍 ابحث في ${esc(mod.title)}..." value="${esc(searchTerm)}"
           style="width:100%;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);"/>
