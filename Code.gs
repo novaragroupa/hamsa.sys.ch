@@ -752,6 +752,12 @@ function filterRowsForSession(rows, table, session) {
   const myName = session.name || '';
 
   if (table === 'employees') {
+    // عضو الفريق (pr_member) يشوف صفّه هو بس في صفحة "الموظفون"، ومش
+    // بيانات باقي زمايله في نفس الفريق. رئيس الفريق (pr_leader) لسه
+    // بيشوف كل أعضاء فريقه زي ما كان (محتاجها عشان يدير الفريق).
+    if (session.role === 'pr_member') {
+      return rows.filter(r => String(r.id || '') === String(session.employeeId || ''));
+    }
     return rows.filter(r => allowed.indexOf(String(r.name || '')) >= 0);
   }
 
