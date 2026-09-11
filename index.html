@@ -367,12 +367,13 @@
         {key:'nationalId', label:'الرقم القومي', type:'text'},
         {key:'registrationDate', label:'تاريخ التسجيل', type:'date', required:true},
         {key:'type', label:'النوع', type:'select', options:['مهتم','مندوب']},
+        {key:'repStatus', label:'حالة المندوب', type:'select', options:['فعال','غير فعال']},
         {key:'company', label:'الشركة', type:'dynamicSelect', ref:'companies', refField:'name'},
         {key:'status', label:'الحالة', type:'select', options:['جديد','تم التواصل','تحويل لحجز','مشترك']},
         {key:'sourceType', label:'جاي عن طريق', type:'select',
           options:['مندوب','علاقات عامة','ريسبشن','ميديا']},
         {key:'responsiblePerson', label:'اسم المسؤول عنه', type:'dynamicSelect', ref:'employees', refField:'name'},
-        {key:'managerRep', label:'شغال تحت إشراف مندوب', type:'dynamicSelect',
+        {key:'managerRep', label:' تحت إشراف مندوب', type:'dynamicSelect',
           ref:'indoor_leads', refField:'name', filter:{field:'type', value:'مندوب'}},
         {key:'notes', label:'ملاحظات', type:'textarea'},
       ]},
@@ -444,7 +445,7 @@
         {key:'hotelId', label:'الفندق', type:'linkSelect', ref:'accom_hotels', parentKey:'tripId'},
         {key:'roomId', label:'الغرفة', type:'linkSelect', ref:'accom_rooms', parentKey:'hotelId'},
         {key:'lotteryStatus', label:'حالة القرعة', type:'select', options:['لسه مش عارف','فائز','لم يفز']},
-        {key:'travelStatus', label:'حالة السفر', type:'select', options:['لسه مسافر','سافر']},
+        {key:'travelStatus', label:'حالة السفر', type:'select', options:['لم يسافر','سافر']},
         {key:'subscriptionStatus', label:'حالة الاشتراك', type:'select', options:['نشط','مكتمل','ملغي']},
         {key:'notes', label:'ملاحظات', type:'textarea'},
       ]},
@@ -2596,10 +2597,10 @@
       const label = linkMaps && linkMaps[f.key] && linkMaps[f.key][val];
       return esc(label || val);
     }
-    if(f.key==='status' || f.key==='flightStatus' || f.key==='paymentStatus'){
+    if(f.key==='status' || f.key==='flightStatus' || f.key==='paymentStatus' || f.key==='repStatus'){
       const map = {'تم التواصل':'blue','تم تحديد معاد':'gold','تم الرفض':'red','تحت التفاوض':'gold',
         'لم يتم التوصل لأي شيء':'gray','لم تتم الزيارة':'gray','مكتمل':'green','جاري السداد':'gold','متأخر':'red',
-        'تم الحجز':'green','لم يُحجز':'gray','جديد':'blue','تحويل لحجز':'green'};
+        'تم الحجز':'green','لم يُحجز':'gray','جديد':'blue','تحويل لحجز':'green','فعال':'green','غير فعال':'red'};
       const cls = map[val] || 'gray';
       return val? `<span class="badge ${cls}">${esc(val)}</span>` : '';
     }
