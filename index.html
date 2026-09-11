@@ -186,6 +186,15 @@
   .modal-actions .btn-primary{flex:1;}
   .photo-preview{width:64px;height:64px;border-radius:50%;object-fit:cover;background:var(--sand-100);margin-bottom:8px;display:block;}
 
+  .hub-choice-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:22px;}
+  @media (max-width:700px){.hub-choice-grid{grid-template-columns:1fr;}}
+  .hub-choice-card{background:#fff;border:1.5px solid var(--line);border-radius:22px;padding:52px 24px;
+    text-align:center;transition:.18s;}
+  .hub-choice-card:hover{border-color:var(--gold-500);box-shadow:0 14px 32px rgba(12,31,61,.14);transform:translateY(-3px);}
+  .hub-choice-icon{font-size:52px;margin-bottom:16px;line-height:1;}
+  .hub-choice-title{font-size:21px;font-weight:800;color:var(--navy-900);}
+  .hub-choice-count{font-size:14px;color:var(--navy-700);font-weight:700;margin-top:10px;}
+
   .areas-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;}
   .area-chip{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;text-align:center;transition:border-color .15s;}
   .area-chip .cnt{font-size:22px;font-weight:800;color:var(--navy-800);}
@@ -245,6 +254,12 @@
   .click-card:hover{box-shadow:0 6px 16px rgba(12,31,61,.12);transform:translateY(-2px);}
   .progress-track{height:8px;background:var(--sand-100);border-radius:6px;overflow:hidden;margin-top:8px;}
   .progress-fill{height:100%;border-radius:6px;background:var(--navy-600);}
+  .countdown-badge{display:inline-flex;align-items:center;gap:5px;margin-top:8px;padding:5px 12px;border-radius:20px;
+    font-size:12px;font-weight:800;}
+  .countdown-badge.cd-ok{background:#e5f5ec;color:var(--success);}
+  .countdown-badge.cd-soon{background:#fff3d1;color:var(--warn);}
+  .countdown-badge.cd-urgent{background:#fdeceb;color:var(--danger);}
+  .countdown-badge.cd-done{background:#eef0f3;color:#555;}
 
   /* ---------------- شيت البيانات القابل للتعديل المباشر ---------------- */
   .cell-input{width:100%;padding:6px 8px;border:1px solid transparent;border-radius:6px;background:transparent;font-size:13px;}
@@ -1769,10 +1784,21 @@
     return renderTripHub_TripsList(page);
   }
 
+  function tripCountdownHtml(trip, assignedCount){
+    const capacity = num_(trip.capacity);
+    if(!capacity) return '';
+    const remaining = capacity - assignedCount;
+    if(remaining <= 0) return `<div class="countdown-badge cd-done">✔ تم اكتمال الرحلة</div>`;
+    if(remaining <= 3) return `<div class="countdown-badge cd-urgent">⏳ متبقي ${remaining} على اكتمال الرحلة</div>`;
+    if(remaining <= 10) return `<div class="countdown-badge cd-soon">⏳ متبقي ${remaining} على اكتمال الرحلة</div>`;
+    return `<div class="countdown-badge cd-ok">⏳ متبقي ${remaining} على اكتمال الرحلة</div>`;
+  }
+
   async function renderTripHub_TripsList(page){
-    await getDataMany(['trips','trip_hotels']);
+    await getDataMany(['trips','trip_hotels','subscriptions']);
     const trips = (await getData('trips')).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
     const links = await getData('trip_hotels');
+    const subs = await getData('subscriptions');
     page.innerHTML = `
       <div class="page-head"><h2>🧳 الرحلات</h2>
         ${canManageAccommodation()? `<button class="btn-primary btn-gold" id="add-trip-btn" style="width:auto;padding:10px 20px;">+ إضافة رحلة</button>`:''}
@@ -1781,10 +1807,12 @@
       <div class="card">
         ${trips.length? `<div class="areas-grid">${trips.map(t=>{
           const hCnt = links.filter(l=>l.tripId===t.id).length;
+          const assignedCount = subs.filter(s=>String(s.tripId||'')===String(t.id)).length;
           return `<div class="area-chip click-card" data-trip="${t.id}">
             <div class="cnt">🧳</div><div class="nm">${esc(t.label||'رحلة')}</div>
             <div class="nm" style="color:var(--navy-700);font-weight:700;">${esc(t.date||'')}</div>
             <div class="nm" style="color:var(--muted);font-size:11px;">${hCnt} فندق مرتبط</div>
+            ${tripCountdownHtml(t, assignedCount)}
             ${canManageAccommodation()? `<button class="icon-btn" data-edittrip="${t.id}" style="margin-top:6px;">✏️ تعديل</button>
              <button class="icon-btn del" data-deltrip="${t.id}" style="margin-top:6px;">🗑️ حذف الرحلة فقط</button>`:''}
           </div>`;
@@ -1818,6 +1846,7 @@
         <form id="trip-form-new"><div class="form-grid">
           <div class="field"><label>تاريخ الرحلة</label><input name="date" type="date" required value="${esc(row?.date||'')}"/></div>
           <div class="field"><label>اسم/وصف الرحلة</label><input name="label" placeholder="مثال: عمرة رمضان دفعة 1" value="${esc(row?.label||'')}"/></div>
+          <div class="field full"><label>العدد المطلوب لاكتمال الرحلة</label><input name="capacity" type="number" min="0" placeholder="مثال: 40" value="${esc(row?.capacity||'')}"/></div>
           <div class="field full"><label>ملاحظات</label><textarea name="notes" rows="3">${esc(row?.notes||'')}</textarea></div>
         </div>
         <div class="modal-actions"><button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
@@ -1830,7 +1859,7 @@
         const guard = submitGuard(e.target); if(!guard.ok) return;
         try{
           const fd = new FormData(e.target);
-          const rec = {id: id||uid(), date:fd.get('date'), label:fd.get('label'), notes:fd.get('notes')};
+          const rec = {id: id||uid(), date:fd.get('date'), label:fd.get('label'), capacity:fd.get('capacity'), notes:fd.get('notes')};
           if(id) await apiUpdate('trips', rec); else await apiAdd('trips', rec);
           modalBg.remove(); render();
         }catch(err){ console.error(err); alert('تعذر الحفظ'); guard.release(); }
@@ -2295,16 +2324,16 @@
     page.innerHTML = `
       <div class="page-head"><h2>${mod.icon} ${esc(mod.title)}</h2></div>
       <div class="assumption-note">اختر القسم اللي عاوز تدخله: المهتمون أو المندوبين. جوه كل قسم تقدر تشوف كل البيانات الخاصة بيه وتضيف سجل جديد بنفس النوع تلقائيًا.</div>
-      <div class="areas-grid">
-        <div class="area-chip click-card" data-type="مهتم" style="padding:26px;">
-          <div class="cnt" style="font-size:30px;">🎯</div>
-          <div class="nm" style="font-size:15px;font-weight:800;margin-top:6px;">المهتمون</div>
-          <div class="nm" style="color:var(--navy-700);font-weight:700;">${interestedCount} سجل</div>
+      <div class="hub-choice-grid">
+        <div class="hub-choice-card click-card" data-type="مهتم">
+          <div class="hub-choice-icon">🎯</div>
+          <div class="hub-choice-title">المهتمون</div>
+          <div class="hub-choice-count">${interestedCount} سجل</div>
         </div>
-        <div class="area-chip click-card" data-type="مندوب" style="padding:26px;">
-          <div class="cnt" style="font-size:30px;">🧑‍💼</div>
-          <div class="nm" style="font-size:15px;font-weight:800;margin-top:6px;">المندوبين</div>
-          <div class="nm" style="color:var(--navy-700);font-weight:700;">${repsCount} سجل</div>
+        <div class="hub-choice-card click-card" data-type="مندوب">
+          <div class="hub-choice-icon">🧑‍💼</div>
+          <div class="hub-choice-title">المندوبين</div>
+          <div class="hub-choice-count">${repsCount} سجل</div>
         </div>
       </div>`;
     page.querySelectorAll('[data-type]').forEach(el=>el.addEventListener('click', ()=>{
