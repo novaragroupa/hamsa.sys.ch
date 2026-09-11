@@ -908,7 +908,7 @@
         </div>
       </div>`;
 
-    root.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click', ()=>{ state.view=b.dataset.view; state.sidebarOpen=false; render(); }));
+    root.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click', ()=>{ state.view=b.dataset.view; state.indoorLeadsType=null; state.sidebarOpen=false; render(); }));
     document.getElementById('logout-btn').addEventListener('click', async ()=>{
       const btn=document.getElementById('logout-btn');
       if(btn) btn.disabled=true;
@@ -937,6 +937,7 @@
     else if(state.view==='accommodation') await renderAccommodationSection(page);
     else if(state.view==='trips_hub') await renderTripsHub(page);
     else if(state.view==='winners') await renderWinnersSection(page);
+    else if(state.view==='indoor_leads') await renderIndoorLeadsSection(page);
     else if(MODULES[state.view]) await renderModule(page, state.view);
   }
 
@@ -973,7 +974,7 @@
           ${mods.map(([k,m])=>`<div class="area-chip" style="cursor:pointer" data-go="${k}"><div class="cnt">${m.icon}</div><div class="nm">${esc(m.title)}</div></div>`).join('')}
         </div>
       </div>`;
-    page.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click', ()=>{ state.view=el.dataset.go; render(); }));
+    page.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click', ()=>{ state.view=el.dataset.go; state.indoorLeadsType=null; render(); }));
   }
 
 
@@ -2092,17 +2093,28 @@
     // عرض فقط: التسكين والحسابات يشوفوا الفائزين، بس مايقدروش يغيّروا رحلة
     // الفائز ولا يفتحوا فورم التعديل من هنا (نفس منطق prCanEditRow بالظبط).
     const canEditWinners = prCanEditRow('subscriptions', null);
+
+    const WINNER_FILTER_FIELDS = [
+      {key:'gender', label:'الجنس', options:['ذكر','أنثى']},
+      {key:'governorate', label:'المحافظة', options:EGYPT_GOVERNORATES},
+      {key:'packageType', label:'نوع الباقة', options:['عمرة كاش','عمرة قسط','عمرة تيسير','تيسير رمضان','حج قرعة تيسير','حج قرعة عادي','حج سياحي']},
+      {key:'travelStatus', label:'حالة السفر', options:['لم يسافر','سافر']},
+    ];
+    state.winnersFilters = state.winnersFilters || {};
+    const activeFilters = state.winnersFilters;
+    const columnFilteredData = applyColumnFilters(data, activeFilters);
+
     state.moduleSearch=state.moduleSearch||{};
     const searchTerm=state.moduleSearch.winners||'';
     // بنحسب نص البحث لكل صف مرة واحدة بس (مش مع كل حرف يتكتب)، عشان تفادي
     // إعادة حساب join/toLowerCase على كل الصفوف مع كل ضغطة زر أثناء الكتابة.
-    const searchIndex=data.map(r=>({row:r, text:[r.customerName,r.packageType,r.phone,r.nationalId,r.gender,r.governorate,r.travelStatus,tripMap[r.tripId],hotelMap[r.hotelId],roomMap[r.roomId]].join(' ').toLowerCase()}));
+    const searchIndex=columnFilteredData.map(r=>({row:r, text:[r.customerName,r.packageType,r.phone,r.nationalId,r.gender,r.governorate,r.travelStatus,tripMap[r.tripId],hotelMap[r.hotelId],roomMap[r.roomId]].join(' ').toLowerCase()}));
     const getRows=term=>{
       term=String(term||'').trim().toLowerCase();
-      return term? searchIndex.filter(x=>x.text.includes(term)).map(x=>x.row) : data;
+      return term? searchIndex.filter(x=>x.text.includes(term)).map(x=>x.row) : columnFilteredData;
     };
     const tableHtml=rows=>!rows.length
-      ? `<div class="empty-state"><div class="big">${data.length?'🔍':'🏆'}</div>${data.length?'لا توجد نتائج مطابقة للبحث':'لا يوجد فائزون حتى الآن'}</div>`
+      ? `<div class="empty-state"><div class="big">${data.length?'🔍':'🏆'}</div>${data.length?'لا توجد نتائج مطابقة للبحث/الفلتر':'لا يوجد فائزون حتى الآن'}</div>`
       : `<div class="table-wrap"><table><thead><tr><th>العميل</th><th>نوع الاشتراك</th><th>الهاتف</th><th>الرقم القومي</th><th>الجنس</th><th>المحافظة</th><th>حالة القرعة</th><th>الرحلة</th><th>الفندق</th><th>الغرفة</th><th>حالة السفر</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr>
         <td>${esc(r.customerName||'')}</td><td>${esc(r.packageType||'')}</td><td>${esc(r.phone||'')}</td><td>${esc(r.nationalId||'')}</td><td>${esc(r.gender||'')}</td><td>${esc(r.governorate||'')}</td>
         <td><span class="badge gold">فائز</span></td>
@@ -2112,10 +2124,26 @@
         <td>${esc(hotelMap[r.hotelId]||'—')}</td><td>${esc(roomMap[r.roomId]||'—')}</td><td>${esc(r.travelStatus||'لسه مسافر')}</td>
         <td>${canEditWinners ? `<button class="icon-btn" data-winner-edit="${esc(r.id)}">✏️</button>` : ''}</td>
       </tr>`).join('')}</tbody></table></div>`;
+    const filterBarHtml = `<div class="analytics-filterbar" id="winners-filterbar" style="margin-top:10px;${Object.values(activeFilters).some(v=>v)?'':'display:none;'}">
+      ${WINNER_FILTER_FIELDS.map(f=>{
+        const cur = activeFilters[f.key]||'';
+        return `<select class="analytics-filter" data-filterfield="${f.key}">
+          <option value="">${esc(f.label)}: الكل</option>
+          ${f.options.map(o=>`<option value="${esc(o)}" ${o===cur?'selected':''}>${esc(o)}</option>`).join('')}
+        </select>`;
+      }).join('')}
+      <button class="btn-secondary" id="clear-winners-filters" style="width:auto;padding:8px 14px;">✖ مسح الفلاتر</button>
+    </div>`;
     page.innerHTML=`<div class="page-head"><h2>🏆 الفائزون</h2></div>
       ${isPRUser()&&state.user.role!=='pr_manager'?`<div class="assumption-note">البيانات المعروضة هنا خاصة بنطاق صلاحيتك.</div>`:''}
       ${!canEditWinners?`<div class="assumption-note">عرض فقط: ليس لديك صلاحية تعديل بيانات الفائزين.</div>`:''}
-      ${data.length?`<div class="card" style="padding:14px 20px;margin-bottom:14px;"><input type="text" id="winners-search-input" placeholder="🔍 ابحث في الفائزون..." value="${esc(searchTerm)}" style="width:100%;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);"/></div>`:''}
+      ${data.length?`<div class="card" style="padding:14px 20px;margin-bottom:14px;">
+        <div style="display:flex;gap:10px;align-items:center;">
+          <input type="text" id="winners-search-input" placeholder="🔍 ابحث في الفائزون..." value="${esc(searchTerm)}" style="flex:1;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);"/>
+          <button class="icon-btn" id="winners-filter-toggle" style="background:var(--sand-100);white-space:nowrap;">🔽 فلتر</button>
+        </div>
+        ${filterBarHtml}
+      </div>`:''}
       <div class="card"><div id="winners-table-wrap">${tableHtml(getRows(searchTerm))}</div></div>`;
     const bind=container=>{
       container.querySelectorAll('[data-winner-edit]').forEach(b=>b.addEventListener('click',()=>openForm('subscriptions',b.dataset.winnerEdit)));
@@ -2127,6 +2155,21 @@
       }));
     };
     const wrap=document.getElementById('winners-table-wrap'); bind(wrap);
+    const filterToggleBtn = document.getElementById('winners-filter-toggle');
+    if(filterToggleBtn){
+      filterToggleBtn.addEventListener('click', ()=>{
+        const bar = document.getElementById('winners-filterbar');
+        if(bar) bar.style.display = bar.style.display==='none' ? '' : 'none';
+      });
+    }
+    page.querySelectorAll('#winners-filterbar .analytics-filter').forEach(sel=>{
+      sel.addEventListener('change', ()=>{
+        state.winnersFilters[sel.dataset.filterfield] = sel.value;
+        render();
+      });
+    });
+    const clearWinnersFiltersBtn = document.getElementById('clear-winners-filters');
+    if(clearWinnersFiltersBtn) clearWinnersFiltersBtn.addEventListener('click', ()=>{ state.winnersFilters={}; render(); });
     const input=document.getElementById('winners-search-input');
     if(input){
       // debounce على البحث: بنستنى المستخدم يوقف عن الكتابة 180ms قبل إعادة رسم
@@ -2201,8 +2244,61 @@
     container.querySelectorAll('.assign-room').forEach(sel=>handle(sel,(row,val)=>({...row, roomId:val})));
   }
 
+  /* ---------------- المهتمون والمندوبين: بوابة اختيار بين مربعين ---------------- */
+  async function renderIndoorLeadsSection(page){
+    if(!state.indoorLeadsType){
+      await renderIndoorLeadsHub(page);
+    } else {
+      await renderModule(page, 'indoor_leads', {
+        forcedFilter: {type: state.indoorLeadsType},
+        forcedAddValues: {type: state.indoorLeadsType},
+        crumbs: [{label:'المهتمون والمندوبين'},{label: state.indoorLeadsType==='مهتم'?'المهتمون':'المندوبين'}],
+        crumbHandlers: [ ()=>{ state.indoorLeadsType=null; render(); } ]
+      });
+    }
+  }
+
+  async function renderIndoorLeadsHub(page){
+    const mod = MODULES.indoor_leads;
+    await getDataMany(['indoor_leads', ...(isPRUser()?['employees']:[])]);
+    const allData = await getData('indoor_leads');
+    const data = await filterPRData('indoor_leads', allData);
+    const interestedCount = data.filter(r=>r.type==='مهتم').length;
+    const repsCount = data.filter(r=>r.type==='مندوب').length;
+    page.innerHTML = `
+      <div class="page-head"><h2>${mod.icon} ${esc(mod.title)}</h2></div>
+      <div class="assumption-note">اختر القسم اللي عاوز تدخله: المهتمون أو المندوبين. جوه كل قسم تقدر تشوف كل البيانات الخاصة بيه وتضيف سجل جديد بنفس النوع تلقائيًا.</div>
+      <div class="areas-grid">
+        <div class="area-chip click-card" data-type="مهتم" style="padding:26px;">
+          <div class="cnt" style="font-size:30px;">🎯</div>
+          <div class="nm" style="font-size:15px;font-weight:800;margin-top:6px;">المهتمون</div>
+          <div class="nm" style="color:var(--navy-700);font-weight:700;">${interestedCount} سجل</div>
+        </div>
+        <div class="area-chip click-card" data-type="مندوب" style="padding:26px;">
+          <div class="cnt" style="font-size:30px;">🧑‍💼</div>
+          <div class="nm" style="font-size:15px;font-weight:800;margin-top:6px;">المندوبين</div>
+          <div class="nm" style="color:var(--navy-700);font-weight:700;">${repsCount} سجل</div>
+        </div>
+      </div>`;
+    page.querySelectorAll('[data-type]').forEach(el=>el.addEventListener('click', ()=>{
+      state.indoorLeadsType = el.dataset.type; render();
+    }));
+  }
+
+  /* ---------------- فلترة الأعمدة العامة (تُستخدم مع البحث في الموديولات والفائزين) ---------------- */
+  function filterableFieldsFor(mod, excludeKeys){
+    excludeKeys = excludeKeys || [];
+    return mod.fields.filter(f=> (f.type==='select'||f.type==='dynamicSelect') && !excludeKeys.includes(f.key));
+  }
+  function applyColumnFilters(data, filters){
+    const active = Object.entries(filters||{}).filter(([k,v])=>v);
+    if(!active.length) return data;
+    return data.filter(r=> active.every(([k,v])=> String(r[k]||'')===String(v)));
+  }
+
   /* ---------------- Generic module CRUD renderer ---------------- */
-  async function renderModule(page, key){
+  async function renderModule(page, key, options){
+    options = options || {};
     const mod = MODULES[key];
     if(!mod || !mod.roles.includes(state.user.role)) return;
     const linkRefs = mod.fields.filter(f=>f.type==='linkSelect').map(f=>f.ref);
@@ -2210,6 +2306,11 @@
     await getDataMany([key, ...((isPRUser()||key==='visits')?['employees']:[]), ...linkRefs, ...extraRefs]);
     const allData = await getData(key);
     let data = await filterPRData(key, allData);
+
+    if(options.forcedFilter){
+      const ff = options.forcedFilter;
+      data = data.filter(r => Object.entries(ff).every(([k,v])=> String(r[k]||'')===String(v)));
+    }
 
     if(key==='visits' && state.user.role!=='admin'){
       const emp = await currentEmployeeFresh();
@@ -2273,11 +2374,21 @@
     const canWriteModule = !(['accommodation','accounting'].includes(state.user.role) && key==='subscriptions');
     const canAssignTrip = key==='subscriptions' && state.user.role==='accommodation';
 
+    // فلترة الأعمدة: بنستبعد أي حقل اتفرض من forcedFilter (زي النوع جوه بوابة
+    // المهتمين/المندوبين) عشان مايبانش فلتر لحاجة أصلًا متثبتة في هذا العرض.
+    state.moduleFilters = state.moduleFilters || {};
+    const filterStateKey = options.forcedFilter ? key+':'+Object.values(options.forcedFilter).join(',') : key;
+    state.moduleFilters[filterStateKey] = state.moduleFilters[filterStateKey] || {};
+    const activeFilters = state.moduleFilters[filterStateKey];
+    const filterExclude = options.forcedFilter ? Object.keys(options.forcedFilter) : [];
+    const filterFields = filterableFieldsFor(mod, filterExclude);
+    const columnFilteredData = applyColumnFilters(data, activeFilters);
+
     const bindTableEvents = (container, visibleData)=>{
       if(canAssignTrip){ bindAccommodationAssignEvents(container, visibleData); return; }
       container.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click', ()=>{
         const row=visibleData.find(r=>String(r.id)===String(b.dataset.edit));
-        if(prCanEditRow(key,row)) openForm(key,b.dataset.edit); else alert('ليس لديك صلاحية لتعديل هذه البيانات');
+        if(prCanEditRow(key,row)) openForm(key,b.dataset.edit,options.forcedAddValues); else alert('ليس لديك صلاحية لتعديل هذه البيانات');
       }));
       container.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', async ()=>{
         const row=visibleData.find(r=>String(r.id)===String(b.dataset.del));
@@ -2295,14 +2406,29 @@
 
     const tableSectionHtml = (visibleData)=>{
       if(!data.length) return `<div class="empty-state"><div class="big">📭</div>لا توجد بيانات بعد — ابدأ بالإضافة</div>`;
-      if(!visibleData.length) return `<div class="empty-state"><div class="big">🔍</div>لا توجد نتائج مطابقة للبحث</div>`;
+      if(!visibleData.length) return `<div class="empty-state"><div class="big">🔍</div>لا توجد نتائج مطابقة للبحث/الفلتر</div>`;
       return `<div class="table-wrap"><table>
           <thead><tr>${mod.fields.map(f=>`<th>${esc(f.label)}</th>`).join('')}<th></th></tr></thead>
           <tbody>${visibleData.map(row=> canAssignTrip? renderAccommodationAssignRow(mod,row,linkMaps) : renderRow(mod,row,linkMaps,canWriteModule)).join('')}</tbody>
         </table></div>`;
     };
 
+    const hasFilterFields = filterFields.length>0;
+    const filterBarHtml = hasFilterFields ? `
+      <div class="analytics-filterbar" id="module-filterbar" style="margin-top:10px;${Object.values(activeFilters).some(v=>v)?'':'display:none;'}">
+        ${filterFields.map(f=>{
+          const opts = f.type==='select'? f.options : [...new Set(data.map(r=>r[f.key]).filter(Boolean))];
+          const cur = activeFilters[f.key]||'';
+          return `<select class="analytics-filter" data-filterfield="${f.key}">
+            <option value="">${esc(f.label)}: الكل</option>
+            ${opts.map(o=>`<option value="${esc(o)}" ${o===cur?'selected':''}>${esc(o)}</option>`).join('')}
+          </select>`;
+        }).join('')}
+        <button class="btn-secondary" id="clear-module-filters" style="width:auto;padding:8px 14px;">✖ مسح الفلاتر</button>
+      </div>` : '';
+
     page.innerHTML = `
+      ${options.crumbs? crumbsBar(options.crumbs) : ''}
       <div class="page-head">
         <h2>${mod.icon} ${esc(mod.title)}</h2>
         ${canWriteModule ? `<button class="btn-primary btn-gold" id="add-btn" style="width:auto;padding:10px 20px;">+ إضافة</button>` : ''}
@@ -2311,19 +2437,41 @@
       ${!canWriteModule && !canAssignTrip ? `<div class="assumption-note">عرض فقط: ليس لديك صلاحية إضافة أو تعديل أو حذف بيانات هنا.</div>`:''}
       ${canAssignTrip ? `<div class="assumption-note">تقدر هنا تحدد الرحلة والفندق والغرفة لكل مشترك فقط — باقي بيانات المشترك للعرض.</div>`:''}
       ${data.length? `<div class="card" style="padding:14px 20px;margin-bottom:14px;">
-        <input type="text" id="module-search-input" placeholder="🔍 ابحث في ${esc(mod.title)}..." value="${esc(searchTerm)}"
-          style="width:100%;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);"/>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <input type="text" id="module-search-input" placeholder="🔍 ابحث في ${esc(mod.title)}..." value="${esc(searchTerm)}"
+            style="flex:1;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);"/>
+          ${hasFilterFields? `<button class="icon-btn" id="module-filter-toggle" style="background:var(--sand-100);white-space:nowrap;">🔽 فلتر</button>`:''}
+        </div>
+        ${filterBarHtml}
       </div>` : ''}
-      <div class="card"><div id="module-table-wrap">${tableSectionHtml(filterModuleRows(mod, data, linkMaps, searchTerm))}</div></div>`;
+      <div class="card"><div id="module-table-wrap">${tableSectionHtml(filterModuleRows(mod, columnFilteredData, linkMaps, searchTerm))}</div></div>`;
+
+    if(options.crumbs && options.crumbHandlers) bindCrumbs(page, options.crumbHandlers);
 
     if(canWriteModule){
-      document.getElementById('add-btn').addEventListener('click', ()=> key==='employees' ? openEmployeeAccountForm() : openForm(key, null));
+      document.getElementById('add-btn').addEventListener('click', ()=> key==='employees' ? openEmployeeAccountForm() : openForm(key, null, options.forcedAddValues));
     }
 
-    const searchIndex = data.map(row=>({row, text: rowSearchText(mod, row, linkMaps)}));
+    const filterToggleBtn = document.getElementById('module-filter-toggle');
+    if(filterToggleBtn){
+      filterToggleBtn.addEventListener('click', ()=>{
+        const bar = document.getElementById('module-filterbar');
+        if(bar) bar.style.display = bar.style.display==='none' ? '' : 'none';
+      });
+    }
+    page.querySelectorAll('#module-filterbar .analytics-filter').forEach(sel=>{
+      sel.addEventListener('change', ()=>{
+        activeFilters[sel.dataset.filterfield] = sel.value;
+        render();
+      });
+    });
+    const clearFiltersBtn = document.getElementById('clear-module-filters');
+    if(clearFiltersBtn) clearFiltersBtn.addEventListener('click', ()=>{ state.moduleFilters[filterStateKey] = {}; render(); });
+
+    const searchIndex = columnFilteredData.map(row=>({row, text: rowSearchText(mod, row, linkMaps)}));
     const filterBySearchIndex = (term)=>{
       term = (term||'').trim().toLowerCase();
-      return term ? searchIndex.filter(x=>x.text.includes(term)).map(x=>x.row) : data;
+      return term ? searchIndex.filter(x=>x.text.includes(term)).map(x=>x.row) : columnFilteredData;
     };
 
     let currentVisible = filterBySearchIndex(searchTerm);
@@ -2507,7 +2655,8 @@
     });
   }
 
-  async function openForm(key, id){
+  async function openForm(key, id, forcedValues){
+    forcedValues = forcedValues || {};
     const mod = MODULES[key];
     if(!mod || !mod.roles.includes(state.user.role)) return;
     const refKeys = mod.fields.filter(f=>f.type==='dynamicSelect'||f.type==='linkSelect').map(f=>f.ref);
@@ -2553,6 +2702,14 @@
       </div></form>
     </div>`;
     document.body.appendChild(modalBg);
+
+    // تثبيت أي حقول متفروضة من العرض الحالي (زي النوع جوه بوابة المهتمين/
+    // المندوبين) وتعطيلها عشان المستخدم مايقدرش يغيّرها بالغلط ويخرج السجل
+    // من القسم اللي هو فاتحه.
+    Object.keys(forcedValues).forEach(k=>{
+      const el = modalBg.querySelector(`[name="${k}"]`);
+      if(el){ el.value = forcedValues[k]; el.setAttribute('disabled','disabled'); }
+    });
 
     const cascadeFields = mod.fields.filter(f=>f.type==='linkSelect' && f.parentKey);
     if(cascadeFields.length){
@@ -2602,6 +2759,7 @@
           const el = modalBg.querySelector(`[name="${f.key}"]`);
           if(el) newRow[f.key] = el.value;
         }
+        Object.keys(forcedValues).forEach(k=>{ newRow[k] = forcedValues[k]; });
 
         if(key==='indoor_leads' && isNew && !newRow.code){
           newRow.code = generateCustomerCode(newRow.phone);
