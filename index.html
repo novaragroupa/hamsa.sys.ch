@@ -313,7 +313,8 @@
     'الإسماعيلية','المنوفية','المنيا','القليوبية','الوادي الجديد','السويس','أسوان','أسيوط','بني سويف','بورسعيد',
     'دمياط','الشرقية','جنوب سيناء','كفر الشيخ','مطروح','الأقصر','قنا','شمال سيناء','سوهاج'];
 
-  const ROOM_TYPES = ['رجال','سيدات','عائلية'];
+  const ROOM_TYPES = ['رجال','سيدات','عائلية','فردي','ثنائي','ثلاثي','رباعي','خماسي'];
+  const ROOM_TYPE_CAPACITY = {'فردي':1,'ثنائي':2,'ثلاثي':3,'رباعي':4,'خماسي':5};
 
   /* ---------------- Module definitions (generic CRUD engine) ---------------- */
   const MODULES = {
@@ -441,9 +442,8 @@
         {key:'installmentMonths', label:'عدد شهور التقسيط', type:'number'},
         {key:'installmentAmount', label:'قيمة القسط', type:'number'},
         {key:'downPayment', label:'المقدم', type:'number'},
-        {key:'tripId', label:'الرحلة (التسكين)', type:'linkSelect', ref:'trips'},
-        {key:'hotelId', label:'الفندق', type:'linkSelect', ref:'accom_hotels', parentKey:'tripId'},
-        {key:'roomId', label:'الغرفة', type:'linkSelect', ref:'accom_rooms', parentKey:'hotelId'},
+        {key:'tripId', label:'الرحلة', type:'linkSelect', ref:'trips'},
+        {key:'roomType', label:'نوع الغرفة (التسكين)', type:'select', options:['فردي','ثنائي','ثلاثي','رباعي','خماسي']},
         {key:'lotteryStatus', label:'حالة القرعة', type:'select', options:['لسه مش عارف','فائز','لم يفز']},
         {key:'travelStatus', label:'حالة السفر', type:'select', options:['لم يسافر','سافر']},
         {key:'subscriptionStatus', label:'حالة الاشتراك', type:'select', options:['نشط','مكتمل','ملغي']},
@@ -648,7 +648,8 @@
     };
   }
   function roomTypeBadge(t){
-    const map = {'رجال':'blue','سيدات':'gold','عائلية':'green'};
+    const map = {'رجال':'blue','سيدات':'gold','عائلية':'green',
+      'فردي':'gray','ثنائي':'blue','ثلاثي':'gold','رباعي':'green','خماسي':'red'};
     return t? `<span class="badge ${map[t]||'gray'}">${esc(t)}</span>` : `<span class="badge gray">غير محدد</span>`;
   }
   function linkLabel(ref, r){
@@ -678,13 +679,6 @@
   }
 
   async function linkSelectOptionsFor(moduleKey, f, parentVal){
-    if(moduleKey==='subscriptions' && f.key==='hotelId' && f.ref==='accom_hotels' && f.parentKey==='tripId'){
-      if(!parentVal) return [];
-      const tripHotels = await getData('trip_hotels');
-      const hotels = await getData('accom_hotels');
-      const hotelIds = tripHotels.filter(th=>String(th.tripId)===String(parentVal)).map(th=>th.hotelId);
-      return hotels.filter(h=>hotelIds.includes(h.id)).map(h=>({id:h.id, label: linkLabel('accom_hotels', h)}));
-    }
     const refList = await getData(f.ref);
     if(!f.parentKey) return refList.map(r=>({id:r.id, label: linkLabel(f.ref, r)}));
     const list = parentVal? refList.filter(r=> String(r[f.parentKey])===String(parentVal)) : [];
@@ -776,19 +770,54 @@
   }
 
   async function syncSubscriptionGuest(sub){
+    const capacity = ROOM_TYPE_CAPACITY[sub.roomType];
     const guests = await getData('accom_guests');
     const existing = guests.find(g=>String(g.subscriptionId||'')===String(sub.id));
 
-    if(!sub.roomId){
+    // من غير رحلة أو من غير نوع غرفة معروف: مافيش تسكين فعلي — أي حجز قديم يتشال
+    if(!sub.tripId || !capacity){
       if(existing) await apiDelete('accom_guests', existing.id);
       return;
+    }
+
+    await getDataMany(['trip_hotels','accom_hotels','accom_rooms']);
+    const hotelIds = (await getData('trip_hotels')).filter(th=>String(th.tripId)===String(sub.tripId)).map(th=>th.hotelId);
+    const matchingRooms = (await getData('accom_rooms')).filter(r=>hotelIds.includes(r.hotelId) && num_(r.capacity)===capacity);
+
+    // لو الضيف أصلًا متسكن في غرفة لسه مناسبة (نفس الرحلة ونفس السعة)، سيبه فيها من غير تحريك
+    if(existing && existing.roomId && String(existing.tripId||'')===String(sub.tripId) && matchingRooms.some(r=>r.id===existing.roomId)){
+      const rec = {...existing, name:sub.customerName||'', nationalId:sub.nationalId||'', phone:sub.phone||''};
+      await apiUpdate('accom_guests', rec);
+      return;
+    }
+
+    // دوّر على غرفة فيها مكان فاضي من نفس السعة في فنادق الرحلة
+    const freshGuests = await getData('accom_guests');
+    let targetRoomId = null;
+    for(const room of matchingRooms){
+      const occ = freshGuests.filter(g=>g.roomId===room.id && String(g.tripId||'')===String(sub.tripId) && String(g.subscriptionId||'')!==String(sub.id));
+      if(occ.length < capacity){ targetRoomId = room.id; break; }
+    }
+
+    // مافيش غرفة مناسبة فاضية: أنشئ غرفة جديدة تلقائيًا في أول فندق مرتبط بالرحلة
+    if(!targetRoomId){
+      if(!hotelIds.length){
+        // مفيش فندق مرتبط بالرحلة أصلًا — استحالة نحدد مكان فعلي، فنشيل أي حجز قديم ونوقف
+        if(existing) await apiDelete('accom_guests', existing.id);
+        return;
+      }
+      const hotelId = hotelIds[0];
+      const hotelRoomsCount = (await getData('accom_rooms')).filter(r=>r.hotelId===hotelId).length;
+      const newRoom = {id:uid(), hotelId, roomNumber:String(hotelRoomsCount+1), capacity:String(capacity), roomType:sub.roomType, availableFrom:'', availableTo:''};
+      await apiAdd('accom_rooms', newRoom);
+      targetRoomId = newRoom.id;
     }
 
     const rec = {
       id: existing? existing.id : uid(),
       subscriptionId: sub.id,
-      roomId: sub.roomId,
-      tripId: sub.tripId||'',
+      roomId: targetRoomId,
+      tripId: sub.tripId,
       name: sub.customerName||'',
       nationalId: sub.nationalId||'',
       phone: sub.phone||'',
@@ -2139,14 +2168,12 @@
   /* ---------------- قسم الفائزون ---------------- */
   async function renderWinnersSection(page){
     if(!MODULES.winners.roles.includes(state.user.role)) return;
-    await getDataMany(['subscriptions','trips','accom_hotels','accom_rooms']);
+    await getDataMany(['subscriptions','trips']);
     let data = await filterPRData('subscriptions', await getData('subscriptions'));
     data = data.filter(r=>String(r.lotteryStatus||'')==='فائز');
 
-    const trips=cache['trips']||[], hotels=cache['accom_hotels']||[], rooms=cache['accom_rooms']||[];
+    const trips=cache['trips']||[];
     const tripMap=Object.fromEntries(trips.map(r=>[r.id,linkLabel('trips',r)]));
-    const hotelMap=Object.fromEntries(hotels.map(r=>[r.id,linkLabel('accom_hotels',r)]));
-    const roomMap=Object.fromEntries(rooms.map(r=>[r.id,linkLabel('accom_rooms',r)]));
     // عرض فقط: التسكين والحسابات يشوفوا الفائزين، بس مايقدروش يغيّروا رحلة
     // الفائز ولا يفتحوا فورم التعديل من هنا (نفس منطق prCanEditRow بالظبط).
     const canEditWinners = prCanEditRow('subscriptions', null);
@@ -2155,6 +2182,7 @@
       {key:'gender', label:'الجنس', options:['ذكر','أنثى']},
       {key:'governorate', label:'المحافظة', options:EGYPT_GOVERNORATES},
       {key:'packageType', label:'نوع الباقة', options:['عمرة كاش','عمرة قسط','عمرة تيسير','تيسير رمضان','حج قرعة تيسير','حج قرعة عادي','حج سياحي']},
+      {key:'roomType', label:'نوع الغرفة', options:['فردي','ثنائي','ثلاثي','رباعي','خماسي']},
       {key:'travelStatus', label:'حالة السفر', options:['لسه مسافر','سافر']},
     ];
     state.winnersFilters = state.winnersFilters || {};
@@ -2165,20 +2193,20 @@
     const searchTerm=state.moduleSearch.winners||'';
     // بنحسب نص البحث لكل صف مرة واحدة بس (مش مع كل حرف يتكتب)، عشان تفادي
     // إعادة حساب join/toLowerCase على كل الصفوف مع كل ضغطة زر أثناء الكتابة.
-    const searchIndex=columnFilteredData.map(r=>({row:r, text:[r.customerName,r.packageType,r.phone,r.nationalId,r.gender,r.governorate,r.travelStatus,tripMap[r.tripId],hotelMap[r.hotelId],roomMap[r.roomId]].join(' ').toLowerCase()}));
+    const searchIndex=columnFilteredData.map(r=>({row:r, text:[r.customerName,r.packageType,r.phone,r.nationalId,r.gender,r.governorate,r.travelStatus,tripMap[r.tripId],r.roomType].join(' ').toLowerCase()}));
     const getRows=term=>{
       term=String(term||'').trim().toLowerCase();
       return term? searchIndex.filter(x=>x.text.includes(term)).map(x=>x.row) : columnFilteredData;
     };
     const tableHtml=rows=>!rows.length
       ? `<div class="empty-state"><div class="big">${data.length?'🔍':'🏆'}</div>${data.length?'لا توجد نتائج مطابقة للبحث/الفلتر':'لا يوجد فائزون حتى الآن'}</div>`
-      : `<div class="table-wrap"><table><thead><tr><th>العميل</th><th>نوع الاشتراك</th><th>الهاتف</th><th>الرقم القومي</th><th>الجنس</th><th>المحافظة</th><th>حالة القرعة</th><th>الرحلة</th><th>الفندق</th><th>الغرفة</th><th>حالة السفر</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr>
+      : `<div class="table-wrap"><table><thead><tr><th>العميل</th><th>نوع الاشتراك</th><th>الهاتف</th><th>الرقم القومي</th><th>الجنس</th><th>المحافظة</th><th>حالة القرعة</th><th>الرحلة</th><th>نوع الغرفة (التسكين)</th><th>حالة السفر</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr>
         <td>${esc(r.customerName||'')}</td><td>${esc(r.packageType||'')}</td><td>${esc(r.phone||'')}</td><td>${esc(r.nationalId||'')}</td><td>${esc(r.gender||'')}</td><td>${esc(r.governorate||'')}</td>
         <td><span class="badge gold">فائز</span></td>
         <td>${canEditWinners
           ? `<select class="winner-trip-select" data-id="${esc(r.id)}" style="min-width:180px"><option value="">— بدون رحلة —</option>${trips.map(t=>`<option value="${esc(t.id)}" ${String(t.id)===String(r.tripId||'')?'selected':''}>${esc(linkLabel('trips',t))}</option>`).join('')}</select>`
           : esc(tripMap[r.tripId]||'—')}</td>
-        <td>${esc(hotelMap[r.hotelId]||'—')}</td><td>${esc(roomMap[r.roomId]||'—')}</td><td>${esc(r.travelStatus||'لسه مسافر')}</td>
+        <td>${esc(r.roomType||'—')}</td><td>${esc(r.travelStatus||'لسه مسافر')}</td>
         <td>${canEditWinners ? `<button class="icon-btn" data-winner-edit="${esc(r.id)}">✏️</button>` : ''}</td>
       </tr>`).join('')}</tbody></table></div>`;
     const filterBarHtml = `<div class="analytics-filterbar" id="winners-filterbar" style="margin-top:10px;${Object.values(activeFilters).some(v=>v)?'':'display:none;'}">
@@ -2359,7 +2387,7 @@
     const mod = MODULES[key];
     if(!mod || !mod.roles.includes(state.user.role)) return;
     const linkRefs = mod.fields.filter(f=>f.type==='linkSelect').map(f=>f.ref);
-    const extraRefs = key==='subscriptions' ? ['indoor_leads','trip_hotels'] : [];
+    const extraRefs = key==='subscriptions' ? ['indoor_leads'] : [];
     await getDataMany([key, ...((isPRUser()||key==='visits')?['employees']:[]), ...linkRefs, ...extraRefs]);
     const allData = await getData(key);
     let data = await filterPRData(key, allData);
@@ -2717,7 +2745,6 @@
     const mod = MODULES[key];
     if(!mod || !mod.roles.includes(state.user.role)) return;
     const refKeys = mod.fields.filter(f=>f.type==='dynamicSelect'||f.type==='linkSelect').map(f=>f.ref);
-    if(key==='subscriptions') refKeys.push('trip_hotels');
     await getDataMany([key, 'employees', ...refKeys]);
     const list = await getData(key);
     const row = id? list.find(r=>r.id===id) : {};
