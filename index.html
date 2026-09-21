@@ -260,6 +260,12 @@
   .countdown-badge.cd-soon{background:#fff3d1;color:var(--warn);}
   .countdown-badge.cd-urgent{background:#fdeceb;color:var(--danger);}
   .countdown-badge.cd-done{background:#eef0f3;color:#555;}
+  .trip-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(64px,1fr));gap:6px;margin-top:10px;}
+  .trip-stat{background:var(--sand-50);border-radius:9px;padding:7px 4px;text-align:center;}
+  .trip-stat b{display:block;font-size:17px;font-weight:800;color:var(--navy-800);}
+  .trip-stat span{font-size:10.5px;color:var(--muted);}
+  .trip-stat.remaining b{color:var(--warn);}
+  .trip-stat.full b{color:var(--success);}
 
   /* ---------------- شيت البيانات القابل للتعديل المباشر ---------------- */
   .cell-input{width:100%;padding:6px 8px;border:1px solid transparent;border-radius:6px;background:transparent;font-size:13px;}
@@ -653,7 +659,7 @@
   }
   function linkLabel(ref, r){
     if(!r) return '';
-    if(ref==='trips') return (r.label? r.label+' — ':'') + (r.date||'بدون تاريخ');
+    if(ref==='trips') return (r.label? r.label+' — ':'') + (fmtDate(r.date)||'بدون تاريخ');
     if(ref==='accom_hotels') return r.name + (r.location? ' — '+r.location : '');
     if(ref==='accom_rooms') return 'غرفة ' + (r.roomNumber||'') + (r.roomType? ' — '+r.roomType:'');
     return r.name || r.title || r.id;
@@ -667,6 +673,29 @@
     const mm = String(now.getMonth()+1).padStart(2,'0');
     return 'ID' + last4 + dd + mm;
   }
+
+  /* ---------------- التواريخ: بتتخزّن YYYY-MM-DD وبتتعرض MM/DD/YYYY ---------------- */
+  // التخزين بيفضل بصيغة YYYY-MM-DD عشان الترتيب والشيت والـ input type=date يفضلوا شغالين،
+  // والعرض بس هو اللي بيتحوّل لـ MM/DD/YYYY في كل الشاشات.
+  function fmtDate(v){
+    if(v===undefined || v===null || v==='') return '';
+    const s = String(v).trim();
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(m) return m[2]+'/'+m[3]+'/'+m[1];
+    if(/^\d{4}-\d{2}-\d{2}T/.test(s)){
+      const d = new Date(s);
+      if(!isNaN(d)) return String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0')+'/'+d.getFullYear();
+    }
+    return s;
+  }
+  // تاريخ النهاردة بالتوقيت المحلي (مش UTC) عشان مايتأخرش يوم بعد نص الليل.
+  function todayISO(){
+    const d = new Date();
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+  // حقول التاريخ اللي بتتولّد تلقائيًا وقت الإضافة ومابتظهرش في الفورم.
+  const AUTO_DATE_FIELDS = { subscriptions:'subscriptionDate', indoor_leads:'registrationDate' };
+  function isAutoDateField(moduleKey, f){ return AUTO_DATE_FIELDS[moduleKey]===f.key; }
 
   function submitGuard(form){
     const btn = form.querySelector('button[type=submit]');
@@ -768,7 +797,7 @@
     const sub={
       id:uid(), leadId:lead.id, customerName:lead.name||'', nationalId:lead.nationalId||'', phone:lead.phone||'',
       gender:'', governorate:'', groupName:'',
-      responsiblePerson:lead.responsiblePerson||'', subscriptionDate:new Date().toISOString().slice(0,10),
+      responsiblePerson:lead.responsiblePerson||'', subscriptionDate:todayISO(),
       packageType:'', installmentMonths:'', installmentAmount:'', downPayment:'',
       lotteryStatus:'لسه مش عارف', travelStatus:'لسه مسافر',
       subscriptionStatus:'نشط', notes:lead.notes||''
@@ -1117,7 +1146,7 @@
           ${md.length?md.map(x=>`<div class="link-box"><div><b>${esc(x.title)}</b>${x.phone?`<div style="font-size:12px;margin-top:3px">📞 ${esc(x.phone)}</div>`:''}<div style="font-size:12px;color:var(--muted)">${esc(x.data||x.notes||'')}</div></div>${x.link?`<a href="${esc(x.link)}" target="_blank" rel="noopener">فتح ↗</a>`:''}</div>`).join(''):'<div class="empty-state">لا توجد داتا</div>'}
         </div>
         <div class="card"><h3>💳 اشتراكات العضو</h3>
-          ${ms.length?`<div class="table-wrap"><table><thead><tr><th>العميل</th><th>التاريخ</th><th>الباقة</th><th>الحالة</th></tr></thead><tbody>${ms.map(x=>`<tr><td>${esc(x.customerName)}</td><td>${esc(x.subscriptionDate)}</td><td>${esc(x.packageType)}</td><td>${esc(x.subscriptionStatus)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state">لا توجد اشتراكات</div>'}
+          ${ms.length?`<div class="table-wrap"><table><thead><tr><th>العميل</th><th>التاريخ</th><th>الباقة</th><th>الحالة</th></tr></thead><tbody>${ms.map(x=>`<tr><td>${esc(x.customerName)}</td><td>${esc(fmtDate(x.subscriptionDate))}</td><td>${esc(x.packageType)}</td><td>${esc(x.subscriptionStatus)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state">لا توجد اشتراكات</div>'}
         </div>`;
       document.getElementById('back-members').addEventListener('click',()=>showTeam(m?.team||teamNames[0]||''));
       document.getElementById('add-member-lead').addEventListener('click',()=>openForm('indoor_leads',null));
@@ -1193,7 +1222,7 @@
       const rowsHtml = list.map(e=>{
         running += num_(e.debit) - num_(e.credit);
         return `<tr>
-          <td>${esc(e.date)}</td><td>${esc(e.description)}</td><td>${esc(e.packageType)}</td>
+          <td>${esc(fmtDate(e.date))}</td><td>${esc(e.description)}</td><td>${esc(e.packageType)}</td>
           <td>${e.debit? money_(e.debit):'—'}</td><td>${e.credit? money_(e.credit):'—'}</td>
           <td><b>${money_(running)}</b></td>
           <td style="white-space:nowrap;"><button class="icon-btn" data-edit="${e.id}">✏️</button><button class="icon-btn del" data-del="${e.id}">🗑️</button></td>
@@ -1707,7 +1736,7 @@
               <thead><tr><th>الاسم</th><th>الرقم القومي</th><th>رقم الجواز</th><th>الهاتف</th><th>حالة الطيران</th><th>الرحلة</th></tr></thead>
               <tbody>${roomGuests.map(g=>{
                 const t = trips.find(tr=>tr.id===g.tripId);
-                const tripLbl = t? esc(t.label||t.date||'') : '—';
+                const tripLbl = t? esc(t.label||fmtDate(t.date)||'') : '—';
                 return `<tr>
                   <td>${esc(g.name||'بدون اسم')}</td>
                   <td>${esc(g.nationalId||'—')}</td>
@@ -1723,7 +1752,7 @@
               <h3 style="display:flex;align-items:center;gap:8px;">🛏️ غرفة ${esc(r.roomNumber||'')} ${roomTypeBadge(r.roomType)}
                 <span class="badge ${over?'red':'green'}">${cnt} / ${cap}</span></h3>
               <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
-                <span style="font-size:12.5px;color:var(--muted);">الإتاحة: ${esc(r.availableFrom||'—')} → ${esc(r.availableTo||'—')}</span>
+                <span style="font-size:12.5px;color:var(--muted);">الإتاحة: ${esc(fmtDate(r.availableFrom)||'—')} → ${esc(fmtDate(r.availableTo)||'—')}</span>
                 ${canManageAccommodation()? `<button class="icon-btn" data-editroomstd="${r.id}">✏️ تعديل</button>
                  <button class="icon-btn del" data-delroomstd="${r.id}">🗑️ حذف</button>`:''}
               </div>
@@ -1792,12 +1821,28 @@
 
   function tripCountdownHtml(trip, assignedCount){
     const capacity = num_(trip.capacity);
-    if(!capacity) return '';
-    const remaining = capacity - assignedCount;
-    if(remaining <= 0) return `<div class="countdown-badge cd-done">✔ تم اكتمال الرحلة</div>`;
-    if(remaining <= 3) return `<div class="countdown-badge cd-urgent">⏳ متبقي ${remaining} على اكتمال الرحلة</div>`;
-    if(remaining <= 10) return `<div class="countdown-badge cd-soon">⏳ متبقي ${remaining} على اكتمال الرحلة</div>`;
-    return `<div class="countdown-badge cd-ok">⏳ متبقي ${remaining} على اكتمال الرحلة</div>`;
+    // عدد المشتركين بيظهر دايمًا (حتى لو مفيش "عدد مطلوب" متحدد للرحلة)،
+    // والمطلوب والمتبقي والشريط بيظهروا بس لما يكون فيه عدد مطلوب.
+    const subsStat = `<div class="trip-stat"><b>${assignedCount}</b><span>عدد المشتركين</span></div>`;
+    if(!capacity){
+      return `<div class="trip-stats">${subsStat}</div>
+        <div class="nm" style="font-size:11px;margin-top:6px;">لم يتم تحديد العدد المطلوب للرحلة</div>`;
+    }
+    const remaining = Math.max(capacity - assignedCount, 0);
+    const over = Math.max(assignedCount - capacity, 0);
+    const pct = Math.min(100, Math.round(assignedCount / capacity * 100));
+    const stats = `<div class="trip-stats">
+        <div class="trip-stat"><b>${capacity}</b><span>العدد المطلوب</span></div>
+        ${subsStat}
+        <div class="trip-stat ${remaining===0?'full':'remaining'}"><b>${remaining}</b><span>المتبقي</span></div>
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${remaining===0?'var(--success)':'var(--navy-600)'};"></div></div>`;
+    let badge;
+    if(remaining === 0) badge = `<div class="countdown-badge cd-done">✔ تم اكتمال الرحلة${over? ' (زيادة '+over+')' : ''}</div>`;
+    else if(remaining <= 3) badge = `<div class="countdown-badge cd-urgent">⏳ متبقي ${remaining} على اكتمال الرحلة</div>`;
+    else if(remaining <= 10) badge = `<div class="countdown-badge cd-soon">⏳ متبقي ${remaining} على اكتمال الرحلة</div>`;
+    else badge = `<div class="countdown-badge cd-ok">⏳ متبقي ${remaining} على اكتمال الرحلة</div>`;
+    return stats + badge;
   }
 
   async function renderTripHub_TripsList(page){
@@ -1816,7 +1861,7 @@
           const assignedCount = subs.filter(s=>String(s.tripId||'')===String(t.id)).length;
           return `<div class="area-chip click-card" data-trip="${t.id}">
             <div class="cnt">🧳</div><div class="nm">${esc(t.label||'رحلة')}</div>
-            <div class="nm" style="color:var(--navy-700);font-weight:700;">${esc(t.date||'')}</div>
+            <div class="nm" style="color:var(--navy-700);font-weight:700;">${esc(fmtDate(t.date))}</div>
             <div class="nm" style="color:var(--muted);font-size:11px;">${hCnt} فندق مرتبط</div>
             ${tripCountdownHtml(t, assignedCount)}
             ${canManageAccommodation()? `<button class="icon-btn" data-edittrip="${t.id}" style="margin-top:6px;">✏️ تعديل</button>
@@ -1883,10 +1928,10 @@
     const rooms = await getData('accom_rooms');
     page.innerHTML = `
       <div class="page-head">
-        <h2>🏨 فنادق رحلة ${esc(trip.label||'')} — ${esc(trip.date||'')}</h2>
+        <h2>🏨 فنادق رحلة ${esc(trip.label||'')} — ${esc(fmtDate(trip.date))}</h2>
         ${canManageAccommodation()? `<button class="btn-primary btn-gold" id="link-hotel-btn" style="width:auto;padding:10px 20px;">+ ربط فندق بالرحلة</button>`:''}
       </div>
-      ${crumbsBar([{label:'الرحلات'},{label:(trip.label||trip.date||'الفندق')}])}
+      ${crumbsBar([{label:'الرحلات'},{label:(trip.label||fmtDate(trip.date)||'الفندق')}])}
       <div class="card">
         ${links.length? `<div class="areas-grid">${links.map(l=>{
           const h = allHotels.find(x=>x.id===l.hotelId);
@@ -1979,10 +2024,10 @@
     const guests = (await getData('accom_guests')).filter(g=>g.tripId===trip.id);
     page.innerHTML = `
       <div class="page-head">
-        <h2>🛏️ غرف فندق ${esc(hotel.name)} — رحلة ${esc(trip.label||trip.date||'')}</h2>
+        <h2>🛏️ غرف فندق ${esc(hotel.name)} — رحلة ${esc(trip.label||fmtDate(trip.date)||'')}</h2>
         ${canManageAccommodation()? `<button class="btn-primary btn-gold" id="add-room-trip-btn" style="width:auto;padding:10px 20px;">+ إضافة غرفة لهذا الفندق</button>`:''}
       </div>
-      ${crumbsBar([{label:'الرحلات'},{label:(trip.label||trip.date)},{label:hotel.name}])}
+      ${crumbsBar([{label:'الرحلات'},{label:(trip.label||fmtDate(trip.date))},{label:hotel.name}])}
       <div class="assumption-note">الغرف هنا تابعة للفندق نفسه (مش خاصة بالرحلة)، ويمكن استخدام نفس الغرفة في رحلات أخرى بتواريخ مختلفة. عدد النزلاء المعروض هنا خاص بنزلاء هذه الرحلة فقط.</div>
       <div class="card">
         ${rooms.length? `<div class="areas-grid">${rooms.map(r=>{
@@ -2017,10 +2062,10 @@
     const cap = num_(room.capacity)||1;
     page.innerHTML = `
       <div class="page-head">
-        <h2>👤 نزلاء غرفة ${esc(room.roomNumber||'')} — ${esc(hotel?hotel.name:'')} — رحلة ${esc(trip.label||trip.date||'')}</h2>
+        <h2>👤 نزلاء غرفة ${esc(room.roomNumber||'')} — ${esc(hotel?hotel.name:'')} — رحلة ${esc(trip.label||fmtDate(trip.date)||'')}</h2>
         ${canManageAccommodation()? `<button class="btn-primary btn-gold" id="add-guest-trip-btn" style="width:auto;padding:10px 20px;">+ إضافة نزيل</button>`:''}
       </div>
-      ${crumbsBar([{label:'الرحلات'},{label:(trip.label||trip.date)},{label:(hotel?hotel.name:'')},{label:'غرفة '+(room.roomNumber||'')}])}
+      ${crumbsBar([{label:'الرحلات'},{label:(trip.label||fmtDate(trip.date))},{label:(hotel?hotel.name:'')},{label:'غرفة '+(room.roomNumber||'')}])}
       ${guests.length>cap? `<div class="assumption-note" style="background:#fdeceb;border-color:#f3c6c2;color:var(--danger);">تنبيه: عدد النزلاء (${guests.length}) أكبر من سعة الغرفة (${cap}) في هذه الرحلة</div>`:''}
       <div class="card">
         ${guests.length? `<div class="table-wrap"><table>
@@ -2577,6 +2622,7 @@
         return label || v || '';
       }
       if(f.type==='image') return '';
+      if(f.type==='date') return v? String(v)+' '+fmtDate(v) : '';
       return v==null? '' : String(v);
     });
     return parts.join(' ').toLowerCase();
@@ -2604,6 +2650,9 @@
       return esc(parts.join(' - '));
     }
 
+    if(f.type==='date'){
+      return val? `<span dir="ltr">${esc(fmtDate(val))}</span>` : '';
+    }
     if(f.type==='image'){
       return val? `<img class="row-photo" src="${val}"/>` : `<div class="row-photo"></div>`;
     }
@@ -2766,7 +2815,7 @@
     modalBg.innerHTML = `<div class="modal">
       <h3>${id? 'تعديل بيانات':'إضافة جديد'} — ${esc(mod.title)}</h3>
       <form id="mod-form"><div class="form-grid">
-        ${mod.fields.map(f=>renderField(f, row, refOptions)).join('')}
+        ${mod.fields.filter(f=>!isAutoDateField(key,f)).map(f=>renderField(f, row, refOptions)).join('')}
       </div>
       <div class="modal-actions">
         <button type="button" class="btn-secondary" id="cancel-btn">إلغاء</button>
@@ -2832,6 +2881,11 @@
           if(el) newRow[f.key] = el.value;
         }
         Object.keys(forcedValues).forEach(k=>{ newRow[k] = forcedValues[k]; });
+
+        // تاريخ الاشتراك / التسجيل بيتحط تلقائيًا بتاريخ اليوم وقت الإضافة بس،
+        // وعند التعديل بيفضل زي ما هو (الحقل مش ظاهر في الفورم أصلًا).
+        const autoDateKey = AUTO_DATE_FIELDS[key];
+        if(autoDateKey && isNew && !newRow[autoDateKey]) newRow[autoDateKey] = todayISO();
 
         if(key==='indoor_leads' && isNew && !newRow.code){
           newRow.code = generateCustomerCode(newRow.phone);
