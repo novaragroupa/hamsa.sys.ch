@@ -692,6 +692,7 @@
   }
 
 
+
   /* ---------------- PR access control ---------------- */
   function isPRUser(){ return ['pr_manager','pr_leader','pr_member'].includes(state.user?.role); }
   function canManageAccommodation(){ return ['admin','accommodation','system'].includes(state.user.role); }
@@ -994,7 +995,7 @@
       const subs=await filterPRData('subscriptions', await getData('subscriptions'));
       statsHtml = `<div class="stat-grid">
         <div class="stat-card"><div class="num">${members.length}</div><div class="lbl">${state.user.role==='pr_member'?'بياناتي':'أعضاء الفريق'}</div></div>
-        <div class="stat-card"><div class="num">${leads.filter(x=>x.type==='مهتم').length}</div><div class="lbl">المهتمون المسموح برؤيتهم</div></div>
+        <div class="stat-card"><div class="num">${leads.filter(x=>x.type==='مهتم' && x.status!=='مشترك').length}</div><div class="lbl">المهتمون المسموح برؤيتهم</div></div>
         <div class="stat-card"><div class="num">${leads.filter(x=>x.type==='مندوب').length}</div><div class="lbl">المندوبون</div></div>
         <div class="stat-card"><div class="num">${subs.length}</div><div class="lbl">الاشتراكات</div></div>
       </div>`;
@@ -1050,7 +1051,7 @@
           <div class="detail-grid">
             <div class="detail-item"><div class="k">الفريق</div><div class="v">${esc(mine.team||'بدون فريق')}</div></div>
             <div class="detail-item"><div class="k">الهاتف</div><div class="v">${esc(mine.phone||'—')}</div></div>
-            <div class="detail-item"><div class="k">عدد المهتمين</div><div class="v">${myLeads.filter(x=>x.type==='مهتم').length}</div></div>
+            <div class="detail-item"><div class="k">عدد المهتمين</div><div class="v">${myLeads.filter(x=>x.type==='مهتم' && x.status!=='مشترك').length}</div></div>
             <div class="detail-item"><div class="k">عدد المندوبين</div><div class="v">${myLeads.filter(x=>x.type==='مندوب').length}</div></div>
             <div class="detail-item"><div class="k">الاشتراكات</div><div class="v">${mySubs.length}</div></div>
           </div>
@@ -1085,7 +1086,7 @@
         const ms=subs.filter(x=>x.responsiblePerson===m.name);
         return `<div class="member-card" data-member="${esc(m.name)}">
           <div class="member-name">${esc(m.name)}</div><div class="member-role">${esc(ROLE_LABELS[m.department]||m.department||'عضو فريق')}</div>
-          <div class="member-stats"><div class="member-stat"><b>${ml.filter(x=>x.type==='مهتم').length}</b><span>مهتمون</span></div>
+          <div class="member-stats"><div class="member-stat"><b>${ml.filter(x=>x.type==='مهتم' && x.status!=='مشترك').length}</b><span>مهتمون</span></div>
           <div class="member-stat"><b>${ml.filter(x=>x.type==='مندوب').length}</b><span>مندوبون</span></div>
           <div class="member-stat"><b>${ms.length}</b><span>اشتراكات</span></div></div>
         </div>`;
@@ -1103,7 +1104,7 @@
           <div class="detail-grid">
             <div class="detail-item"><div class="k">الفريق</div><div class="v">${esc(m?.team||'—')}</div></div>
             <div class="detail-item"><div class="k">الهاتف</div><div class="v">${esc(m?.phone||'—')}</div></div>
-            <div class="detail-item"><div class="k">المهتمون</div><div class="v">${ml.filter(x=>x.type==='مهتم').length}</div></div>
+            <div class="detail-item"><div class="k">المهتمون</div><div class="v">${ml.filter(x=>x.type==='مهتم' && x.status!=='مشترك').length}</div></div>
             <div class="detail-item"><div class="k">المندوبون</div><div class="v">${ml.filter(x=>x.type==='مندوب').length}</div></div>
             <div class="detail-item"><div class="k">الاشتراكات</div><div class="v">${ms.length}</div></div>
             <div class="detail-item"><div class="k">الداتا / الأرقام / اللينكات</div><div class="v">${md.length}</div></div>
@@ -1124,6 +1125,8 @@
     };
     page.querySelectorAll('[data-team]').forEach(c=>c.addEventListener('click',()=>showTeam(c.dataset.team)));
   }
+
+
 
   async function renderAreas(page){
     const companies = await getData('companies');
@@ -1555,6 +1558,8 @@
       }catch(err){ console.error(err); alert('تعذر حفظ عنصر التحليل'); guard.release(); }
     });
   }
+
+
 
   let accomMigrationChecked = false;
   async function ensureAccommodationMigration(){
@@ -2243,6 +2248,8 @@
     }
   }
 
+
+
   function subsHotelsForTrip(tripId){
     if(!tripId) return [];
     const tripHotels = (cache.trip_hotels||[]).filter(th=>String(th.tripId)===String(tripId));
@@ -2309,6 +2316,7 @@
       await renderModule(page, 'indoor_leads', {
         forcedFilter: {type: state.indoorLeadsType},
         forcedAddValues: {type: state.indoorLeadsType},
+        excludeWhere: state.indoorLeadsType==='مهتم' ? (r=>r.status==='مشترك') : null,
         crumbs: [{label:'المهتمون والمندوبين'},{label: state.indoorLeadsType==='مهتم'?'المهتمون':'المندوبين'}],
         crumbHandlers: [ ()=>{ state.indoorLeadsType=null; render(); } ]
       });
@@ -2320,7 +2328,7 @@
     await getDataMany(['indoor_leads', ...(isPRUser()?['employees']:[])]);
     const allData = await getData('indoor_leads');
     const data = await filterPRData('indoor_leads', allData);
-    const interestedCount = data.filter(r=>r.type==='مهتم').length;
+    const interestedCount = data.filter(r=>r.type==='مهتم' && r.status!=='مشترك').length;
     const repsCount = data.filter(r=>r.type==='مندوب').length;
     page.innerHTML = `
       <div class="page-head"><h2>${mod.icon} ${esc(mod.title)}</h2></div>
@@ -2367,6 +2375,9 @@
     if(options.forcedFilter){
       const ff = options.forcedFilter;
       data = data.filter(r => Object.entries(ff).every(([k,v])=> String(r[k]||'')===String(v)));
+    }
+    if(options.excludeWhere){
+      data = data.filter(r => !options.excludeWhere(r));
     }
 
     if(key==='visits' && state.user.role!=='admin'){
@@ -2430,6 +2441,9 @@
     // زي ما كان قبل كده من غير أي تغيير في زرار الإضافة بتاعه على أي موديول.
     const canWriteModule = !(['accommodation','accounting'].includes(state.user.role) && key==='subscriptions');
     const canAssignTrip = key==='subscriptions' && state.user.role==='accommodation';
+    // الاشتراك بيتضاف تلقائيًا بس لما حالة المهتم تتغيّر لـ"مشترك" — مفيش زرار
+    // إضافة يدوي في هذا القسم حتى لو المستخدم عنده صلاحية كتابة على الموديول.
+    const canAddNew = canWriteModule && key!=='subscriptions';
 
     // فلترة الأعمدة: بنستبعد أي حقل اتفرض من forcedFilter (زي النوع جوه بوابة
     // المهتمين/المندوبين) عشان مايبانش فلتر لحاجة أصلًا متثبتة في هذا العرض.
@@ -2488,10 +2502,11 @@
       ${options.crumbs? crumbsBar(options.crumbs) : ''}
       <div class="page-head">
         <h2>${mod.icon} ${esc(mod.title)}</h2>
-        ${canWriteModule ? `<button class="btn-primary btn-gold" id="add-btn" style="width:auto;padding:10px 20px;">+ إضافة</button>` : ''}
+        ${canAddNew ? `<button class="btn-primary btn-gold" id="add-btn" style="width:auto;padding:10px 20px;">+ إضافة</button>` : ''}
       </div>
       ${isPRUser() && state.user.role!=='pr_manager' ? `<div class="assumption-note">البيانات المعروضة هنا خاصة بنطاق صلاحيتك. لا يتم عرض بيانات أعضاء العلاقات العامة الآخرين.</div>`:''}
       ${!canWriteModule && !canAssignTrip ? `<div class="assumption-note">عرض فقط: ليس لديك صلاحية إضافة أو تعديل أو حذف بيانات هنا.</div>`:''}
+      ${key==='subscriptions' ? `<div class="assumption-note">الاشتراك بيتولد تلقائيًا فقط عند تغيير حالة المهتم إلى "مشترك" من قسم المهتمون والمندوبين — بعدها هيختفي من قائمة المهتمين ويظهر هنا عشان تكمل بياناته.</div>` : ''}
       ${canAssignTrip ? `<div class="assumption-note">تقدر هنا تحدد الرحلة والفندق والغرفة لكل مشترك فقط — باقي بيانات المشترك للعرض.</div>`:''}
       ${data.length? `<div class="card" style="padding:14px 20px;margin-bottom:14px;">
         <div style="display:flex;gap:10px;align-items:center;">
@@ -2505,7 +2520,7 @@
 
     if(options.crumbs && options.crumbHandlers) bindCrumbs(page, options.crumbHandlers);
 
-    if(canWriteModule){
+    if(canAddNew){
       document.getElementById('add-btn').addEventListener('click', ()=> key==='employees' ? openEmployeeAccountForm() : openForm(key, null, options.forcedAddValues));
     }
 
