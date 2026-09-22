@@ -203,6 +203,37 @@
   .area-chip.room-full .cnt{color:var(--danger);}
   .click-card:hover{border-color:var(--gold-500);}
 
+  /* ---------------- Dashboard (الصفحة الرئيسية) ---------------- */
+  .dash-hero{position:relative;overflow:hidden;border-radius:20px;padding:26px 30px;margin-bottom:24px;
+    background:linear-gradient(120deg,var(--navy-900) 0%,var(--navy-700) 55%,var(--navy-800) 100%);
+    color:#fff;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+  .dash-hero::before{content:"";position:absolute;top:-40px;left:-40px;width:170px;height:170px;border-radius:50%;
+    background:radial-gradient(circle, rgba(242,183,5,.22), transparent 70%);}
+  .dash-hero::after{content:"";position:absolute;bottom:-70px;right:-30px;width:220px;height:220px;border-radius:50%;
+    background:radial-gradient(circle, rgba(242,183,5,.12), transparent 70%);}
+  .dash-hero-text{position:relative;z-index:1;}
+  .dash-hero-text .greet{font-size:13px;color:var(--gold-300);font-weight:700;margin-bottom:4px;}
+  .dash-hero-text h2{margin:0;font-size:24px;font-weight:800;color:#fff;}
+  .dash-hero-text .role-pill{display:inline-block;margin-top:10px;padding:5px 14px;border-radius:20px;
+    background:rgba(255,255,255,.12);font-size:12px;font-weight:700;color:var(--gold-300);}
+  .dash-hero-date{position:relative;z-index:1;text-align:center;background:rgba(255,255,255,.09);border-radius:14px;
+    padding:12px 20px;min-width:112px;}
+  .dash-hero-date .dow{font-size:11px;color:var(--gold-300);font-weight:700;}
+  .dash-hero-date .dnum{font-size:19px;font-weight:800;margin-top:3px;direction:ltr;}
+  @media (max-width:640px){ .dash-hero{padding:22px;} .dash-hero-text h2{font-size:20px;} }
+
+  .stat-card-icon{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;
+    font-size:18px;margin-bottom:10px;color:#fff;position:relative;}
+
+  .dash-group{margin-bottom:22px;}
+  .dash-group-label{font-size:12.5px;font-weight:800;color:var(--navy-700);margin-bottom:10px;
+    display:flex;align-items:center;gap:6px;}
+  .dash-section-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px 14px;text-align:center;
+    transition:.15s;cursor:pointer;}
+  .dash-section-card:hover{border-color:var(--gold-500);box-shadow:0 10px 24px rgba(12,31,61,.12);transform:translateY(-3px);}
+  .dash-section-icon{font-size:27px;margin-bottom:8px;}
+  .dash-section-title{font-size:12.5px;font-weight:700;color:var(--navy-800);}
+
   .split-two{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
   @media (max-width:900px){.split-two{grid-template-columns:1fr;} .form-grid{grid-template-columns:1fr;}}
   @media (max-width:760px){.sidebar{position:fixed;right:0;top:0;bottom:0;z-index:40;transform:translateX(100%);transition:.2s;}
@@ -958,18 +989,23 @@
     await apiAdd('app_settings', rec);
   }
 
+  // بنجمع الأقسام في مجموعات منطقية (العلاقات العامة / التشغيل والحجوزات /
+  // الإدارة والموارد البشرية) عشان نفس التجميع يتستخدم في القائمة الجانبية
+  // وفي الصفحة الرئيسية مع بعض من غير تكرار.
+  const MODULE_GROUP_OF = {
+    teams:'admin', employees:'admin',
+    companies:'pr', visits:'pr', indoor_leads:'pr', indoor_data:'pr', pr_member_data:'pr',
+    callcenter_feedback:'ops', callcenter_payments:'ops', accommodation:'ops', trips_hub:'ops',
+    subscriptions:'ops', winners:'ops'
+  };
+  const GROUP_LABELS = { main:'نظرة عامة', pr:'العلاقات العامة', ops:'التشغيل والحجوزات', admin:'الإدارة والموارد البشرية' };
+  const GROUP_ICONS = { pr:'🎯', ops:'🧳', admin:'🧩' };
+
   function buildShell(){
     const mods = accessibleModules();
     // بنجمع عناصر القائمة الجانبية في مجموعات منطقية (نظرة عامة / علاقات عامة /
     // تشغيل وحجوزات / إدارة) بدل ما تبقى كلها في عمود واحد طويل، عشان القائمة
     // تبقى أسهل في التصفح وأكثر تنظيمًا مع زيادة عدد الأقسام حسب الصلاحية.
-    const NAV_GROUP_OF = {
-      teams:'admin', employees:'admin',
-      companies:'pr', visits:'pr', indoor_leads:'pr', indoor_data:'pr', pr_member_data:'pr',
-      callcenter_feedback:'ops', callcenter_payments:'ops', accommodation:'ops', trips_hub:'ops',
-      subscriptions:'ops', winners:'ops'
-    };
-    const GROUP_LABELS = { main:'نظرة عامة', pr:'العلاقات العامة', ops:'التشغيل والحجوزات', admin:'الإدارة والموارد البشرية' };
     const groups = { main:[], pr:[], ops:[], admin:[] };
     groups.main.push(`<button class="nav-item ${state.view==='dashboard'?'active':''}" data-view="dashboard">🏠<span>الرئيسية</span></button>`);
     groups.main.push(`<button class="nav-item ${state.view==='analytics'?'active':''}" data-view="analytics">📊<span>تحليل البيانات</span></button>`);
@@ -977,7 +1013,7 @@
       groups.pr.push(`<button class="nav-item ${state.view==='pr_teams'?'active':''}" data-view="pr_teams">🧩<span>${state.user.role==='pr_member'?'بياناتي':'فرق العلاقات العامة'}</span></button>`);
     }
     mods.forEach(([k,m])=>{
-      const g = NAV_GROUP_OF[k] || 'ops';
+      const g = MODULE_GROUP_OF[k] || 'ops';
       groups[g].push(`<button class="nav-item ${state.view===k?'active':''}" data-view="${k}">${m.icon}<span>${esc(m.title)}</span></button>`);
     });
     const navHtml = ['main','pr','ops','admin'].filter(g=>groups[g].length).map(g=>
@@ -1050,6 +1086,31 @@
   }
 
 
+  const AR_WEEKDAYS = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  const STAT_ACCENTS = ['var(--navy-700)','#c99a03','var(--success)','#0891b2','#8b5cf6','var(--danger)'];
+  function statCardHtml(icon, num, label, idx){
+    return `<div class="stat-card">
+      <div class="stat-card-icon" style="background:${STAT_ACCENTS[idx % STAT_ACCENTS.length]};">${icon}</div>
+      <div class="num">${num}</div><div class="lbl">${esc(label)}</div>
+    </div>`;
+  }
+  function dashHeroHtml(){
+    const now = new Date();
+    const h = now.getHours();
+    const greet = h<12? 'صباح الخير' : (h<18? 'مساء الخير' : 'مساء الخير');
+    return `<div class="dash-hero">
+      <div class="dash-hero-text">
+        <div class="greet">${greet} 👋</div>
+        <h2>أهلًا، ${esc(state.user.name)}</h2>
+        <span class="role-pill">${esc(ROLE_LABELS[state.user.role]||'')}</span>
+      </div>
+      <div class="dash-hero-date">
+        <div class="dow">${AR_WEEKDAYS[now.getDay()]}</div>
+        <div class="dnum">${esc(fmtDate(todayISO()))}</div>
+      </div>
+    </div>`;
+  }
+
   async function renderDashboard(page, mods){
     const isAdmin = state.user.role==='admin';
     let statsHtml = '';
@@ -1059,30 +1120,42 @@
       const leads=await filterPRData('indoor_leads', await getData('indoor_leads'));
       const subs=await filterPRData('subscriptions', await getData('subscriptions'));
       statsHtml = `<div class="stat-grid">
-        <div class="stat-card"><div class="num">${members.length}</div><div class="lbl">${state.user.role==='pr_member'?'بياناتي':'أعضاء الفريق'}</div></div>
-        <div class="stat-card"><div class="num">${leads.filter(x=>x.type==='مهتم' && x.status!=='مشترك').length}</div><div class="lbl">المهتمون المسموح برؤيتهم</div></div>
-        <div class="stat-card"><div class="num">${leads.filter(x=>x.type==='مندوب').length}</div><div class="lbl">المندوبون</div></div>
-        <div class="stat-card"><div class="num">${subs.length}</div><div class="lbl">الاشتراكات</div></div>
+        ${statCardHtml('👥', members.length, state.user.role==='pr_member'?'بياناتي':'أعضاء الفريق', 0)}
+        ${statCardHtml('🎯', leads.filter(x=>x.type==='مهتم' && x.status!=='مشترك').length, 'المهتمون المسموح برؤيتهم', 1)}
+        ${statCardHtml('🧑\u200d💼', leads.filter(x=>x.type==='مندوب').length, 'المندوبون', 2)}
+        ${statCardHtml('💳', subs.length, 'الاشتراكات', 3)}
       </div>`;
     } else if(isAdmin){
-      const dash = await getDataMany(['employees','companies','accounting']);
-      const emp = dash.employees, comp = dash.companies, acc = dash.accounting;
+      const dash = await getDataMany(['employees','companies','subscriptions']);
+      const emp = dash.employees, comp = dash.companies;
+      const activeSubs = (dash.subscriptions||[]).filter(s=>s.subscriptionStatus==='نشط').length;
       statsHtml = `<div class="stat-grid">
-        <div class="stat-card"><div class="num">${emp.length}</div><div class="lbl">إجمالي الموظفين</div></div>
-        <div class="stat-card"><div class="num">${comp.length}</div><div class="lbl">الشركات المسجلة</div></div>
-        <div class="stat-card"><div class="num">${acc.length}</div><div class="lbl">حالات الحسابات</div></div>
-        <div class="stat-card"><div class="num">${mods.length}</div><div class="lbl">الأقسام المتاحة</div></div>
+        ${statCardHtml('👥', emp.length, 'إجمالي الموظفين', 0)}
+        ${statCardHtml('🏢', comp.length, 'الشركات المسجلة', 1)}
+        ${statCardHtml('💳', activeSubs, 'الاشتراكات النشطة', 2)}
+        ${statCardHtml('🧭', mods.length, 'الأقسام المتاحة', 3)}
       </div>`;
     }
-    page.innerHTML = `
-      <div class="page-head"><h2>مرحبًا، ${esc(state.user.name)} 👋</h2></div>
-      ${statsHtml}
-      <div class="assumption-note">نظام الصلاحيات الجديد يفصل بيانات العلاقات العامة حسب الفريق والعضو: المدير العام يرى الكل، الـTeam Leader يرى فريقه، وعضو الفريق يرى بياناته ومهتميه فقط.</div>
-      <div class="card"><h3>الأقسام المتاحة لك</h3>
+
+    const groupedMods = { pr:[], ops:[], admin:[] };
+    mods.forEach(([k,m])=>{ const g = MODULE_GROUP_OF[k] || 'ops'; groupedMods[g].push([k,m]); });
+    const sectionsHtml = ['pr','ops','admin'].filter(g=>groupedMods[g].length).map(g=>`
+      <div class="dash-group">
+        <div class="dash-group-label">${GROUP_ICONS[g]} ${GROUP_LABELS[g]}</div>
         <div class="areas-grid">
-          ${mods.map(([k,m])=>`<div class="area-chip" style="cursor:pointer" data-go="${k}"><div class="cnt">${m.icon}</div><div class="nm">${esc(m.title)}</div></div>`).join('')}
+          ${groupedMods[g].map(([k,m])=>`<div class="dash-section-card" data-go="${k}">
+              <div class="dash-section-icon">${m.icon}</div>
+              <div class="dash-section-title">${esc(m.title)}</div>
+            </div>`).join('')}
         </div>
-      </div>`;
+      </div>`).join('');
+
+    page.innerHTML = `
+      ${dashHeroHtml()}
+      ${statsHtml}
+      ${isPRUser()? `<div class="assumption-note">نظام الصلاحيات الجديد يفصل بيانات العلاقات العامة حسب الفريق والعضو: المدير العام يرى الكل، الـTeam Leader يرى فريقه، وعضو الفريق يرى بياناته ومهتميه فقط.</div>` : ''}
+      <h3 style="font-size:15px;font-weight:800;color:var(--navy-900);margin:6px 0 14px;">الأقسام المتاحة لك</h3>
+      ${sectionsHtml || `<div class="card"><div class="empty-state">لا توجد أقسام متاحة حاليًا</div></div>`}`;
     page.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click', ()=>{ state.view=el.dataset.go; state.indoorLeadsType=null; render(); }));
   }
 
