@@ -1126,12 +1126,16 @@
         ${statCardHtml('💳', subs.length, 'الاشتراكات', 3)}
       </div>`;
     } else if(isAdmin){
-      const dash = await getDataMany(['employees','companies','subscriptions']);
-      const emp = dash.employees, comp = dash.companies;
+      const dash = await getDataMany(['employees','visits','subscriptions']);
+      const emp = dash.employees;
+      // "الشركات المسجلة" هنا بقت بتتحسب من الشركات اللي فعلًا ظاهرة في
+      // تقارير الزيارات (companyName)، مش من موديول "الشركات" المنفصل، عشان
+      // الرقم يعبّر عن نفس الشركات اللي بتبان في قسم الزيارات بالظبط.
+      const visitCompanyNames = new Set((dash.visits||[]).map(v=>String(v.companyName||'').trim()).filter(Boolean));
       const activeSubs = (dash.subscriptions||[]).filter(s=>s.subscriptionStatus==='نشط').length;
       statsHtml = `<div class="stat-grid">
         ${statCardHtml('👥', emp.length, 'إجمالي الموظفين', 0)}
-        ${statCardHtml('🏢', comp.length, 'الشركات المسجلة', 1)}
+        ${statCardHtml('🏢', visitCompanyNames.size, 'الشركات المسجلة', 1)}
         ${statCardHtml('💳', activeSubs, 'الاشتراكات النشطة', 2)}
         ${statCardHtml('🧭', mods.length, 'الأقسام المتاحة', 3)}
       </div>`;
