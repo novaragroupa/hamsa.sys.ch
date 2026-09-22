@@ -199,6 +199,8 @@
   .area-chip{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;text-align:center;transition:border-color .15s;}
   .area-chip .cnt{font-size:22px;font-weight:800;color:var(--navy-800);}
   .area-chip .nm{font-size:12.5px;color:var(--muted);margin-top:4px;}
+  .area-chip.room-full{background:#fdeceb;border-color:var(--danger);}
+  .area-chip.room-full .cnt{color:var(--danger);}
   .click-card:hover{border-color:var(--gold-500);}
 
   .split-two{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
@@ -1765,7 +1767,7 @@
           const roomGuests = guests.filter(g=>g.roomId===r.id);
           const cap = num_(r.capacity)||1;
           const cnt = roomGuests.length;
-          const over = cnt>cap;
+          const full = cnt>=cap;
           const guestsTableHtml = roomGuests.length? `<div class="table-wrap"><table>
               <thead><tr><th>الاسم</th><th>الرقم القومي</th><th>رقم الجواز</th><th>الهاتف</th><th>حالة الطيران</th><th>الرحلة</th></tr></thead>
               <tbody>${roomGuests.map(g=>{
@@ -1781,10 +1783,10 @@
                 </tr>`;
               }).join('')}</tbody>
             </table></div>` : `<div class="empty-state" style="padding:16px;"><div class="big">📭</div>لا يوجد نزلاء مسجلين في هذه الغرفة</div>`;
-          return `<div class="card" style="margin-bottom:16px;box-shadow:none;">
+          return `<div class="card" style="margin-bottom:16px;box-shadow:none;${full?'background:#fdeceb;border:1.5px solid var(--danger);':''}">
             <div class="page-head" style="margin-bottom:12px;">
               <h3 style="display:flex;align-items:center;gap:8px;">🛏️ غرفة ${esc(r.roomNumber||'')} ${roomTypeBadge(r.roomType)}
-                <span class="badge ${over?'red':'green'}">${cnt} / ${cap}</span></h3>
+                <span class="badge ${full?'red':'green'}">${cnt} / ${cap}</span></h3>
               <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
                 <span style="font-size:12.5px;color:var(--muted);">الإتاحة: ${esc(fmtDate(r.availableFrom)||'—')} → ${esc(fmtDate(r.availableTo)||'—')}</span>
                 ${canManageAccommodation()? `<button class="icon-btn" data-editroomstd="${r.id}">✏️ تعديل</button>
@@ -2067,12 +2069,13 @@
         ${rooms.length? `<div class="areas-grid">${rooms.map(r=>{
           const cnt = guests.filter(g=>g.roomId===r.id).length;
           const cap = num_(r.capacity)||1;
+          const full = cnt>=cap;
           const pct = Math.min(100, Math.round(cnt/cap*100));
-          return `<div class="area-chip click-card" data-room="${r.id}">
+          return `<div class="area-chip click-card ${full?'room-full':''}" data-room="${r.id}">
             <div class="cnt">🛏️ ${esc(r.roomNumber||'')}</div>
             <div class="nm">${roomTypeBadge(r.roomType)}</div>
             <div class="nm">${cnt} / ${cap} فرد (لهذه الرحلة)</div>
-            <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${cnt>cap?'var(--danger)':'var(--navy-600)'};"></div></div>
+            <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${full?'var(--danger)':'var(--navy-600)'};"></div></div>
           </div>`;
         }).join('')}</div>` : `<div class="empty-state"><div class="big">📭</div>لا توجد غرف في هذا الفندق بعد</div>`}
       </div>`;
