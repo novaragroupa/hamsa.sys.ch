@@ -358,11 +358,15 @@
     visits:{ title:'تقارير الزيارات', icon:'📋', roles:['admin','pr_out'],
       fields:[
         {key:'companyName', label:'الشركة', type:'text', required:true},
+        {key:'area', label:'المنطقة', type:'select', options:ALEX_AREAS},
+        {key:'businessType', label:'طبيعة عمل الشركة', type:'text'},
+        {key:'brokerName', label:'اسم الوسيط', type:'text'},
         {key:'visitedBy', label:'الموظف اللي عمل الزيارة', type:'dynamicSelect',
           ref:'employees', refField:'name'},
         {key:'date', label:'تاريخ الزيارة', type:'date'},
         {key:'status', label:'حالة الزيارة', type:'select',
           options:['تم التواصل','لم تتم الزيارة','تم تحديد معاد','تم الرفض','تحت التفاوض','لم يتم التوصل لأي شيء']},
+        {key:'followups', label:'متابعات الزيارة', type:'followups'},
         {key:'notes', label:'ملاحظات', type:'textarea'},
       ]},
     indoor_leads:{ title:'المهتمون والمندوبين', icon:'🎯', roles:['admin','pr_in','pr_manager','pr_leader','pr_member'],
@@ -790,6 +794,23 @@
     if(key==='pr_member_data') return !row?.id || row.memberId===myName;
     return key==='employees' && row?.name===myName;
   }
+
+  // "قائد الفريق (Team Leader)" هو الحقل leader الموجود في جدول teams نفسه
+  // (نفس الحقل المستخدم في فورم الفرق). بنستخدمه هنا عشان نحدد مين اللي
+  // يقدر يدخل ويضيف ويعدل في تقارير الزيارات: قائد فريقه بس، أو الأدمن.
+  async function isTeamLeader(){
+    const emp = await currentEmployeeFresh();
+    if(!emp || !normTeam(emp.team)) return false;
+    const teams = await getData('teams');
+    const team = teams.find(t=>normTeam(t.name)===normTeam(emp.team));
+    return !!team && String(team.leader||'').trim() === String(emp.name||state.user.name||'').trim();
+  }
+  async function canAccessVisits(){
+    if(state.user.role==='admin') return true;
+    if(state.user.role!=='pr_out') return false;
+    return await isTeamLeader();
+  }
+
   async function maybeCreateSubscriptionFromLead(lead){
     if(lead.type!=='مهتم' || lead.status!=='مشترك') return;
     const subs=await getData('subscriptions');
@@ -1011,8 +1032,21 @@
     else if(state.view==='trips_hub') await renderTripsHub(page);
     else if(state.view==='winners') await renderWinnersSection(page);
     else if(state.view==='indoor_leads') await renderIndoorLeadsSection(page);
+    else if(state.view==='visits') await renderVisitsSection(page);
     else if(MODULES[state.view]) await renderModule(page, state.view);
   }
+
+  async function renderVisitsSection(page){
+    const allowed = await canAccessVisits();
+    if(!allowed){
+      page.innerHTML = `
+        <div class="page-head"><h2>📋 تقارير الزيارات</h2></div>
+        <div class="empty-state"><div class="big">🔒</div>تقارير الزيارات متاحة فقط لقائد الفريق (Team Leader) الخاص بك، أو لمدير النظام.</div>`;
+      return;
+    }
+    await renderModule(page, 'visits');
+  }
+
 
   async function renderDashboard(page, mods){
     const isAdmin = state.user.role==='admin';
@@ -2623,6 +2657,10 @@
       }
       if(f.type==='image') return '';
       if(f.type==='date') return v? String(v)+' '+fmtDate(v) : '';
+      if(f.type==='followups'){
+        const arr = Array.isArray(v)? v : [];
+        return arr.map(x=>(x && x.note||'')+' '+fmtDate(x && x.date||'')).join(' ');
+      }
       return v==null? '' : String(v);
     });
     return parts.join(' ').toLowerCase();
@@ -2652,6 +2690,14 @@
 
     if(f.type==='date'){
       return val? `<span dir="ltr">${esc(fmtDate(val))}</span>` : '';
+    }
+    if(f.type==='followups'){
+      const arr = Array.isArray(val)? val.filter(x=>x && (x.date||x.note)) : [];
+      if(!arr.length) return '<span class="badge gray">لا يوجد</span>';
+      const sorted = [...arr].sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+      const last = sorted[sorted.length-1];
+      return `<span class="badge blue">${arr.length} متابعة</span>`
+        + (last.date? ` <span style="font-size:11.5px;color:var(--muted);" dir="ltr">آخرها ${esc(fmtDate(last.date))}</span>` : '');
     }
     if(f.type==='image'){
       return val? `<img class="row-photo" src="${val}"/>` : `<div class="row-photo"></div>`;
@@ -2868,6 +2914,20 @@
       });
     }
 
+    const followupsEditor = modalBg.querySelector('.followups-editor');
+    if(followupsEditor){
+      const list = followupsEditor.querySelector('.followups-list');
+      followupsEditor.querySelector('.followups-add-btn').addEventListener('click', ()=>{
+        const wrap = document.createElement('div');
+        wrap.innerHTML = followupRowHtml(null);
+        list.appendChild(wrap.firstElementChild);
+      });
+      list.addEventListener('click', e=>{
+        const rmBtn = e.target.closest('.followup-remove');
+        if(rmBtn) rmBtn.closest('.followup-row').remove();
+      });
+    }
+
     modalBg.querySelector('#mod-form').addEventListener('submit', async e=>{
       e.preventDefault();
       const guard = submitGuard(e.target); if(!guard.ok) return;
@@ -2877,6 +2937,14 @@
         for(const f of mod.fields){
           if(f.type==='readonly') continue;
           if(f.type==='image'){ newRow[f.key] = imgInput.dataset.value || row[f.key] || ''; continue; }
+          if(f.type==='followups'){
+            const rows = modalBg.querySelectorAll('.followup-row');
+            newRow[f.key] = [...rows].map(r=>({
+              date: r.querySelector('.followup-date').value || '',
+              note: r.querySelector('.followup-note').value || ''
+            })).filter(x=>x.date || x.note);
+            continue;
+          }
           const el = modalBg.querySelector(`[name="${f.key}"]`);
           if(el) newRow[f.key] = el.value;
         }
@@ -2917,9 +2985,21 @@
     });
   }
 
+
+  // صف متابعة واحد (تاريخ + ملاحظة) داخل محرر "متابعات الزيارة". نفس الدالة
+  // بتتستخدم في العرض الأول للفورم وفي زرار "+ إضافة متابعة" وقت الإضافة.
+  function followupRowHtml(item){
+    item = item || {};
+    return `<div class="followup-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
+      <input type="date" class="followup-date" value="${esc(item.date||'')}" style="flex:0 0 155px;padding:9px 10px;border:1.5px solid var(--line);border-radius:8px;font-size:13px;background:var(--sand-50);"/>
+      <input type="text" class="followup-note" placeholder="ملاحظة المتابعة" value="${esc(item.note||'')}" style="flex:1;padding:9px 10px;border:1.5px solid var(--line);border-radius:8px;font-size:13px;background:var(--sand-50);"/>
+      <button type="button" class="icon-btn del followup-remove" style="flex:0 0 auto;">🗑️</button>
+    </div>`;
+  }
+
   function renderField(f, row, refOptions){
     const val = row? (row[f.key]||'') : '';
-    const full = (f.type==='textarea'||f.type==='image') ? 'full':'';
+    const full = (f.type==='textarea'||f.type==='image'||f.type==='followups') ? 'full':'';
     let inner = '';
     if(f.type==='select'){
       inner = `<select name="${f.key}" ${f.required?'required':''}><option value="">اختر...</option>
@@ -2938,6 +3018,12 @@
       inner = `<textarea name="${f.key}" rows="3">${esc(val)}</textarea>`;
     } else if(f.type==='image'){
       inner = `${val?`<img class="photo-preview" src="${val}"/>`:''}<input type="file" accept="image/*" name="${f.key}"/>`;
+    } else if(f.type==='followups'){
+      const items = Array.isArray(row && row[f.key]) ? row[f.key] : [];
+      inner = `<div class="followups-editor" data-key="${f.key}">
+        <div class="followups-list">${items.map(it=>followupRowHtml(it)).join('')}</div>
+        <button type="button" class="icon-btn followups-add-btn" style="background:var(--sand-100);">+ إضافة متابعة</button>
+      </div>`;
     } else if(f.type==='readonly'){
       inner = `<input type="text" name="${f.key}" value="${esc(val)}" readonly style="background:#eee;cursor:not-allowed"/>`;
     } else {
