@@ -4,12 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>نظام إدارة همسة للسياحة</title>
+<!-- preconnect لأسرع اتصال ممكن بالخطوط وبباك إند Google Apps Script (خصوصًا
+     أول طلب: تسجيل الدخول)، بدل ما المتصفح يبدأ الـ DNS/TLS handshake بس لما
+     يوصل فعليًا لسطر الطلب. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://script.google.com">
+<!-- الخط بيتحمّل بـ <link> مباشر في الـ head بدل @import جوه الـ <style>، عشان
+     المتصفح يكتشفه ويبدأ تحميله بالتوازي مع باقي الصفحة، مش بعد ما يخلّص
+     تحليل الـ CSS الأساسي كله أولًا. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Amiri:wght@400;700&display=swap">
 </head>
 <body>
 <div id="app-root"></div>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Amiri:wght@400;700&display=swap');
-
   :root{
     --navy-900:#0c1f3d;
     --navy-800:#14315c;
@@ -2393,8 +2401,9 @@
     if(clearWinnersFiltersBtn) clearWinnersFiltersBtn.addEventListener('click', ()=>{ state.winnersFilters={}; render(); });
     const input=document.getElementById('winners-search-input');
     if(input){
-      // debounce على البحث: بنستنى المستخدم يوقف عن الكتابة 180ms قبل إعادة رسم
+      // debounce على البحث: بنستنى المستخدم يوقف عن الكتابة 120ms قبل إعادة رسم
       // الجدول، بدل ما نعيد الرسم مع كل حرف يتكتب — ده كان بيسبب لاج واضح في الكتابة.
+      // الفلترة نفسها محلية (مش شبكة) فتقليل المهلة هنا بيخلي البحث يحس أسرع من غير أي تكلفة إضافية.
       let winnersDebounce;
       input.addEventListener('input',()=>{
         state.moduleSearch.winners=input.value;
@@ -2402,7 +2411,7 @@
         winnersDebounce=setTimeout(()=>{
           wrap.innerHTML=tableHtml(getRows(input.value));
           bind(wrap);
-        },180);
+        },120);
       });
     }
   }
@@ -2719,7 +2728,7 @@
           const wrap = document.getElementById('module-table-wrap');
           wrap.innerHTML = tableSectionHtml(currentVisible);
           bindTableEvents(wrap, currentVisible);
-        }, 180);
+        }, 120);
       });
     }
   }
