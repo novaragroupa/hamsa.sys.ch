@@ -58,13 +58,13 @@
     -webkit-mask-image:radial-gradient(ellipse at 50% 42%, #000 0%, transparent 76%);
             mask-image:radial-gradient(ellipse at 50% 42%, #000 0%, transparent 76%);}
   .hero-content{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;
-    text-align:center;animation:heroIn .9s cubic-bezier(.16,1,.3,1) both;}
+    text-align:center;}
   @keyframes heroIn{from{opacity:0;transform:translateY(14px) scale(.98);}to{opacity:1;transform:none;}}
   .hero-icon-wrap{position:relative;margin-bottom:24px;display:flex;align-items:center;justify-content:center;}
   .hero-icon-wrap::before{content:"";position:absolute;width:220px;height:220px;border-radius:50%;
-    background:radial-gradient(circle, rgba(242,183,5,.28), transparent 68%);filter:blur(6px);}
+    background:radial-gradient(circle, rgba(242,183,5,.28), transparent 68%);}
   .hero-icon-wrap img{position:relative;height:clamp(190px,24vw,270px);
-    filter:drop-shadow(0 16px 30px rgba(0,0,0,.5));}
+    }
   .hero-title{font-family:'Amiri',serif;color:#fff;font-size:clamp(21px,2.4vw,27px);font-weight:700;margin:0 0 12px;}
   .hero-divider{width:48px;height:2px;background:var(--gold-500);margin:0 0 18px;opacity:.75;}
   .hero-tagline{font-family:'Amiri',serif;color:var(--gold-300);font-size:clamp(14.5px,1.5vw,16.5px);
@@ -72,7 +72,7 @@
 
   .login-panel{flex:1 1 44%;display:flex;align-items:center;justify-content:center;
     background:var(--sand-50);padding:48px 28px;}
-  .login-panel-inner{width:100%;max-width:340px;animation:panelIn .9s .15s cubic-bezier(.16,1,.3,1) both;}
+  .login-panel-inner{width:100%;max-width:340px;}
   @keyframes panelIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
   .login-panel-inner h1{font-size:23px;font-weight:800;color:var(--navy-900);margin:0 0 6px;}
   .login-panel-inner p.sub{color:var(--muted);font-size:13.5px;margin:0 0 30px;line-height:1.7;}
@@ -335,6 +335,7 @@
   .detail-item .v{font-size:13px;font-weight:700;word-break:break-word;}
   .link-box{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;}
   .link-box a{color:var(--navy-700);font-weight:700;text-decoration:none;}
+.mini-loader{padding:48px 20px;text-align:center;color:var(--muted);font-weight:700;font-size:14px;}
 </style>
 
 <script>
@@ -558,7 +559,7 @@
     const r=await fetch(GOOGLE_SHEETS_WEBHOOK,{method:'POST',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body:JSON.stringify({action,table,payload,session:HOMSA_SESSION,at:new Date().toISOString()}),
-      keepalive:true});
+      keepalive:(JSON.stringify(payload||{}).length<50000)});
     const data=await r.json().catch(()=>({ok:true}));
     if(!data.ok) throw new Error(data.error||'فشل حفظ البيانات في Google Sheets');
     return data;
@@ -585,54 +586,74 @@
     catch(e){ console.error('Google Sheets load error', key, e); return []; }
   }
 
+  /* ---- طبقة الكتابة: تحديث فوري للكاش + مزامنة متسلسلة في الخلفية + تراجع تلقائي عند الفشل ---- */
+  let writeChain = Promise.resolve(), pendingWrites = 0, writeEpoch = 0;
+  function writesIdle(){ return writeChain; }
+  function toast(msg, isErr){
+    let box = document.getElementById('toast-box');
+    if(!box){ box = document.createElement('div'); box.id = 'toast-box';
+      box.style.cssText = 'position:fixed;bottom:18px;left:18px;z-index:99;display:flex;flex-direction:column;gap:8px;';
+      document.body.appendChild(box); }
+    const d = document.createElement('div');
+    d.style.cssText = 'padding:10px 16px;border-radius:10px;color:#fff;font-size:13px;font-weight:700;box-shadow:0 6px 18px rgba(0,0,0,.2);background:' + (isErr ? '#b3261e' : '#1a7a4c');
+    d.textContent = msg; box.appendChild(d);
+    setTimeout(()=>d.remove(), isErr ? 6000 : 1800);
+  }
+  function enqueueWrite(job, rollback){
+    pendingWrites++; writeEpoch++;
+    writeChain = writeChain.then(job).catch(err=>{
+      console.error('background sync failed', err);
+      try{ rollback && rollback(); }catch(_){}
+      toast('تعذر حفظ التعديل على الخادم وتم التراجع عنه: ' + ((err && err.message) || ''), true);
+      if(state.user) render();
+    }).finally(()=>{ pendingWrites--; });
+  }
+  window.addEventListener('beforeunload', e=>{ if(pendingWrites>0){ e.preventDefault(); e.returnValue=''; } });
+  function findLocal(table, id){ const l = cache[table]; return l ? l.find(r=>String(r.id)===String(id)) : null; }
+  function restoreLocal(table, prev, id){
+    const l = cache[table]; if(!l) return;
+    const i = l.findIndex(r=>String(r.id)===String(id));
+    if(prev){ if(i>=0) l[i] = prev; else l.push(prev); } else if(i>=0) l.splice(i,1);
+  }
+
   async function apiAdd(table, record){
-    if(!record.id) record.id=uid();
-    await sheetRequest('upsert',table,record);
+    if(!record.id) record.id = uid();
+    const prev = findLocal(table, record.id), copy = prev ? {...prev} : null;
     cacheUpsertLocal(table, record);
-    if(table==='subscriptions') invalidate('accom_guests');
+    const payload = {...record};
+    enqueueWrite(()=>sheetRequest('upsert', table, payload), ()=>restoreLocal(table, copy, payload.id));
     return record;
   }
-
-  async function apiUpdate(table, record){
-    await sheetRequest('upsert',table,record);
-    cacheUpsertLocal(table, record);
-    if(table==='subscriptions') invalidate('accom_guests');
-  }
+  async function apiUpdate(table, record){ await apiAdd(table, record); }
 
   async function apiDelete(table, id){
-    await sheetRequest('delete',table,{id});
+    const prev = findLocal(table, id), copy = prev ? {...prev} : null;
     cacheDeleteLocal(table, id);
-    if(table==='subscriptions') invalidate('accom_guests');
+    enqueueWrite(()=>sheetRequest('delete', table, {id}), ()=>{ if(copy && cache[table]) cache[table].push(copy); });
   }
 
   async function apiDeleteMany(table, ids){
     ids = (ids||[]).filter(Boolean);
     if(!ids.length) return;
-    try{
-      await sheetRequest('batchDelete',table,{ids});
-      ids.forEach(id=>cacheDeleteLocal(table,id));
-      if(table==='subscriptions') invalidate('accom_guests');
-    }catch(e){
-      console.error('batchDelete fallback', table, e);
-      await Promise.all(ids.map(id=>apiDelete(table,id)));
-      if(table==='subscriptions') invalidate('accom_guests');
-    }
+    const copies = (cache[table]||[]).filter(r=>ids.some(i=>String(i)===String(r.id))).map(r=>({...r}));
+    ids.forEach(id=>cacheDeleteLocal(table, id));
+    enqueueWrite(async ()=>{
+      try{ await sheetRequest('batchDelete', table, {ids}); }
+      catch(e){ console.error('batchDelete fallback', table, e); for(const id of ids) await sheetRequest('delete', table, {id}); }
+    }, ()=>{ if(cache[table]) copies.forEach(c=>cache[table].push(c)); });
   }
 
   async function apiAddMany(table, records){
     records = (records||[]).filter(Boolean);
     if(!records.length) return records;
-    records.forEach(r=>{ if(!r.id) r.id=uid(); });
-    try{
-      await sheetRequest('batchUpsert',table,{rows:records});
-      records.forEach(r=>cacheUpsertLocal(table,r));
-      if(table==='subscriptions') invalidate('accom_guests');
-    }catch(e){
-      console.error('batchUpsert fallback', table, e);
-      await Promise.all(records.map(r=>sheetRequest('upsert',table,r)));
-      records.forEach(r=>cacheUpsertLocal(table,r));
-      if(table==='subscriptions') invalidate('accom_guests');
-    }
+    records.forEach(r=>{ if(!r.id) r.id = uid(); });
+    const prevs = records.map(r=>{ const p = findLocal(table, r.id); return p ? {...p} : null; });
+    records.forEach(r=>cacheUpsertLocal(table, r));
+    const payload = records.map(r=>({...r}));
+    enqueueWrite(async ()=>{
+      try{ await sheetRequest('batchUpsert', table, {rows: payload}); }
+      catch(e){ console.error('batchUpsert fallback', table, e); for(const r of payload) await sheetRequest('upsert', table, r); }
+    }, ()=>records.forEach((r,i)=>restoreLocal(table, prevs[i], r.id)));
     return records;
   }
 
@@ -656,38 +677,66 @@
   // دي بتتجمع تلقائيًا في نداء bulk واحد بس. النتيجة: نفس البيانات، نداء
   // واحد بدل اتنين أو تلاتة في نفس اللحظة، فأول تحميل بعد تسجيل الدخول
   // بيبقى أسرع بشكل ملموس.
-  let batchQueue = new Set();
-  let batchScheduled = false;
-  let currentBatchPromise = null;
+  let batchQueue = new Set(), batchPromise = null;
+  const inflight = {};
 
-  function ensureBatchScheduled(){
-    if (batchScheduled) return currentBatchPromise;
-    batchScheduled = true;
-    currentBatchPromise = new Promise((resolve) => {
-      Promise.resolve().then(async () => {
-        const tables = [...batchQueue];
-        batchQueue.clear();
-        batchScheduled = false;
-        currentBatchPromise = null;
-        if(!tables.length){ resolve(); return; }
-        try{
-          const result = await sheetRequestBulk(tables);
-          tables.forEach(t=>{ cache[t] = result[t] || []; });
-        }catch(e){
-          console.error('bulk load error, falling back to parallel single loads', e);
-          await Promise.all(tables.map(async t=>{ try{ cache[t] = await loadList(t); }catch(_){ cache[t]=cache[t]||[]; } }));
-        }
-        resolve();
-      });
-    });
-    return currentBatchPromise;
+  async function fetchTablesFresh(tables){
+    await writesIdle();
+    const e = writeEpoch;
+    let res = await sheetRequestBulk(tables);
+    if(e !== writeEpoch){ await writesIdle(); res = await sheetRequestBulk(tables); }
+    return res;
   }
 
   function queueTable(key){
     if(cache[key]) return Promise.resolve();
+    if(inflight[key]) return inflight[key];
     batchQueue.add(key);
-    return ensureBatchScheduled();
+    if(!batchPromise){
+      batchPromise = Promise.resolve().then(async ()=>{
+        const me = batchPromise, tables = [...batchQueue];
+        batchQueue.clear(); batchPromise = null;
+        try{
+          const result = await fetchTablesFresh(tables);
+          tables.forEach(t=>{ cache[t] = result[t] || []; });
+        }catch(e){
+          console.error('bulk load error, falling back to single loads', e);
+          await Promise.all(tables.map(async t=>{ try{ cache[t] = await sheetRequest('list', t); }catch(_){} }));
+        }finally{
+          tables.forEach(t=>{ if(inflight[t]===me) delete inflight[t]; });
+        }
+      });
+    }
+    inflight[key] = batchPromise;
+    return batchPromise;
   }
+
+  let lastSync = Date.now(), revalidating = false;
+  async function revalidateCache(){
+    if(revalidating || !state.user || !HOMSA_SESSION || pendingWrites) return;
+    if(Date.now() - lastSync < 120000) return;
+    const tables = Object.keys(cache).filter(k=>cache[k]);
+    if(!tables.length) return;
+    revalidating = true;
+    try{
+      await writesIdle();
+      const e = writeEpoch;
+      const res = await sheetRequestBulk(tables);
+      const el = document.activeElement;
+      const busy = document.querySelector('.modal-bg') || (el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName));
+      if(e !== writeEpoch || pendingWrites || busy) return;
+      let changed = false;
+      tables.forEach(t=>{
+        const fresh = res[t] || [];
+        if(JSON.stringify(fresh) !== JSON.stringify(cache[t])){ cache[t] = fresh; changed = true; }
+      });
+      lastSync = Date.now();
+      if(changed) render();
+    }catch(err){ console.warn('revalidate failed', err); if(!state.user) render(); }
+    finally{ revalidating = false; }
+  }
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) revalidateCache(); });
+  setInterval(()=>{ if(!document.hidden) revalidateCache(); }, 180000);
 
   async function getData(key){
     if(cache[key]) return cache[key];
@@ -706,15 +755,16 @@
       const role = state.user && state.user.role;
       if(!role) return;
       const keys = new Set(['employees','dashboards','widgets']);
+      if(isPRUser() || ['admin','hr','pr_out'].includes(role)) keys.add('teams');
       accessibleModules().forEach(([k,m])=>{ if(m.fields && m.fields.length) keys.add(k); });
       if(MODULES.accommodation.roles.includes(role)){
-        ['accom_hotels','accom_rooms','accom_guests'].forEach(k=>keys.add(k));
+        ['accom_hotels','accom_rooms','accom_guests','trips','trip_hotels','app_settings'].forEach(k=>keys.add(k));
       }
       if(MODULES.trips_hub.roles.includes(role)){
         ['trips','trip_hotels','accom_hotels','accom_rooms','accom_guests'].forEach(k=>keys.add(k));
       }
       if(MODULES.winners.roles.includes(role)){
-        ['subscriptions','trips','accom_hotels','accom_rooms'].forEach(k=>keys.add(k));
+        ['subscriptions','trips','trip_hotels','accom_hotels','accom_rooms','accom_guests','indoor_leads'].forEach(k=>keys.add(k));
       }
       await getDataMany([...keys]);
     }catch(e){ console.error('background prefetch error', e); }
@@ -1135,6 +1185,13 @@
   async function renderPage(){
     const page = document.getElementById('page');
     if(!page) return;
+    const sameView = page.dataset.view === state.view, y = window.scrollY;
+    const lt = setTimeout(()=>{ page.innerHTML = '<div class="mini-loader">جارٍ التحميل…</div>'; }, 200);
+    try{ await renderPageBody(page); } finally { clearTimeout(lt); }
+    page.dataset.view = state.view;
+    if(sameView) window.scrollTo(0, y);
+  }
+  async function renderPageBody(page){
     const mods = accessibleModules();
     if(['areas','ledger','companies','callcenter_payments','indoor_data'].includes(state.view)){
       state.view='dashboard'; updateActiveNav();
@@ -3156,6 +3213,7 @@
         if(isNew) await apiAdd(key, newRow); else await apiUpdate(key, newRow);
         if(key==='indoor_leads') await maybeCreateSubscriptionFromLead(newRow);
         if(key==='subscriptions') await syncSubscriptionGuest(newRow);
+        toast('تم الحفظ ✓');
         modalBg.remove();
         render();
       }catch(err){
