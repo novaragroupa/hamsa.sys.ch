@@ -753,16 +753,42 @@
 
   async function linkSelectOptionsFor(moduleKey, f, parentVal){
     if(moduleKey==='subscriptions' && f.key==='hotelId' && f.ref==='accom_hotels' && f.parentKey==='tripId'){
-      if(!parentVal) return [];
-      const tripHotels = await getData('trip_hotels');
       const hotels = await getData('accom_hotels');
-      const hotelIds = tripHotels.filter(th=>String(th.tripId)===String(parentVal)).map(th=>th.hotelId);
-      return hotels.filter(h=>hotelIds.includes(h.id)).map(h=>({id:h.id, label: linkLabel('accom_hotels', h)}));
+      if(!parentVal){
+        // لسه مفيش رحلة متحددة: نعرض كل الفنادق كمجموعة واحدة "باقي الفنادق".
+        return hotels.map(h=>({id:h.id, label: linkLabel('accom_hotels', h), group:'باقي الفنادق'}));
+      }
+      const tripHotels = await getData('trip_hotels');
+      const linkedIds = new Set(tripHotels.filter(th=>String(th.tripId)===String(parentVal)).map(th=>th.hotelId));
+      // بنعرض فنادق الرحلة المرتبطة فعليًا الأول، وبعدها باقي فنادق النظام
+      // كلها كخيار إضافي، عشان تقدر تسكّن العميل في فندق تاني حتى لو مش
+      // مربوط بالرحلة دي رسميًا في قسم "الرحلات".
+      const tripHotelsList = hotels.filter(h=>linkedIds.has(h.id)).map(h=>({id:h.id, label: linkLabel('accom_hotels', h), group:'فنادق الرحلة'}));
+      const otherHotelsList = hotels.filter(h=>!linkedIds.has(h.id)).map(h=>({id:h.id, label: linkLabel('accom_hotels', h), group:'باقي الفنادق'}));
+      return [...tripHotelsList, ...otherHotelsList];
     }
     const refList = await getData(f.ref);
     if(!f.parentKey) return refList.map(r=>({id:r.id, label: linkLabel(f.ref, r)}));
     const list = parentVal? refList.filter(r=> String(r[f.parentKey])===String(parentVal)) : [];
     return list.map(r=>({id:r.id, label: linkLabel(f.ref, r)}));
+  }
+
+  // بيبني <option>/<optgroup> من مصفوفة الخيارات؛ لو أي خيار معاه group بيتقسّم
+  // لمجموعات بنفس ترتيب ظهورها، غير كده بيرجع قائمة مسطّحة زي الأول بالظبط.
+  function linkOptionsHtml(opts, selectedId){
+    const hasGroups = opts.some(o=>o.group);
+    const optionHtml = o=>`<option value="${esc(o.id)}" ${String(o.id)===String(selectedId)?'selected':''}>${esc(o.label)}</option>`;
+    if(!hasGroups) return opts.map(optionHtml).join('');
+    const groups = [];
+    opts.forEach(o=>{
+      let g = groups.find(x=>x.name===(o.group||''));
+      if(!g){ g={name:o.group||'', items:[]}; groups.push(g); }
+      g.items.push(o);
+    });
+    return groups.map(g=> g.name
+      ? `<optgroup label="${esc(g.name)}">${g.items.map(optionHtml).join('')}</optgroup>`
+      : g.items.map(optionHtml).join('')
+    ).join('');
   }
 
 
@@ -1024,6 +1050,12 @@
       const g = MODULE_GROUP_OF[k] || 'ops';
       groups[g].push(`<button class="nav-item ${state.view===k?'active':''}" data-view="${k}">${m.icon}<span>${esc(m.title)}</span></button>`);
     });
+    // "الاشتراكات الملغاة" مش موديول مستقل في MODULES — هي نفس بيانات
+    // الاشتراكات بس مفلترة على حالة "ملغي"، فبتظهر لنفس اللي أصلًا يقدر
+    // يشوف "الاشتراكات".
+    if(mods.some(([k])=>k==='subscriptions')){
+      groups.ops.push(`<button class="nav-item ${state.view==='cancelled_subscriptions'?'active':''}" data-view="cancelled_subscriptions">🚫<span>الاشتراكات الملغاة</span></button>`);
+    }
     const navHtml = ['main','pr','ops','admin'].filter(g=>groups[g].length).map(g=>
       `<div class="nav-section"><div class="nav-section-label">${GROUP_LABELS[g]}</div>${groups[g].join('')}</div>`
     ).join('');
@@ -1079,7 +1111,25 @@
     else if(state.view==='winners') await renderWinnersSection(page);
     else if(state.view==='indoor_leads') await renderIndoorLeadsSection(page);
     else if(state.view==='visits') await renderVisitsSection(page);
+    else if(state.view==='subscriptions') await renderSubscriptionsSection(page, false);
+    else if(state.view==='cancelled_subscriptions') await renderSubscriptionsSection(page, true);
     else if(MODULES[state.view]) await renderModule(page, state.view);
+  }
+
+  async function renderSubscriptionsSection(page, cancelledOnly){
+    if(cancelledOnly){
+      await renderModule(page, 'subscriptions', {
+        forcedFilter: {subscriptionStatus:'ملغي'},
+        noAssign: true,
+        titleOverride: 'الاشتراكات الملغاة',
+        crumbs: [{label:'الاشتراكات'},{label:'الاشتراكات الملغاة'}],
+        crumbHandlers: [ ()=>{ state.view='subscriptions'; render(); } ]
+      });
+    } else {
+      await renderModule(page, 'subscriptions', {
+        excludeWhere: r=>r.subscriptionStatus==='ملغي'
+      });
+    }
   }
 
   async function renderVisitsSection(page){
@@ -2313,7 +2363,7 @@
     if(!MODULES.winners.roles.includes(state.user.role)) return;
     await getDataMany(['subscriptions','trips','accom_hotels','accom_rooms']);
     let data = await filterPRData('subscriptions', await getData('subscriptions'));
-    data = data.filter(r=>String(r.lotteryStatus||'')==='فائز');
+    data = data.filter(r=>String(r.lotteryStatus||'')==='فائز' && r.subscriptionStatus!=='ملغي');
 
     const trips=cache['trips']||[], hotels=cache['accom_hotels']||[], rooms=cache['accom_rooms']||[];
     const tripMap=Object.fromEntries(trips.map(r=>[r.id,linkLabel('trips',r)]));
@@ -2419,11 +2469,16 @@
 
 
   function subsHotelsForTrip(tripId){
-    if(!tripId) return [];
-    const tripHotels = (cache.trip_hotels||[]).filter(th=>String(th.tripId)===String(tripId));
+    // بترجع الفنادق مقسّمة: فنادق الرحلة المرتبطة الأول، وبعدها باقي فنادق
+    // النظام كلها كخيار إضافي — نفس منطق linkSelectOptionsFor لكن بشكل
+    // متزامن (sync) عشان بيتستخدم في جدول تعيين التسكين اللي بيترسم فورًا.
     const hotels = cache.accom_hotels||[];
-    const ids = tripHotels.map(th=>th.hotelId);
-    return hotels.filter(h=>ids.includes(h.id));
+    if(!tripId) return hotels.map(h=>({id:h.id, label: linkLabel('accom_hotels', h), group:'باقي الفنادق'}));
+    const tripHotels = (cache.trip_hotels||[]).filter(th=>String(th.tripId)===String(tripId));
+    const linkedIds = new Set(tripHotels.map(th=>th.hotelId));
+    const tripHotelsList = hotels.filter(h=>linkedIds.has(h.id)).map(h=>({id:h.id, label: linkLabel('accom_hotels', h), group:'فنادق الرحلة'}));
+    const otherHotelsList = hotels.filter(h=>!linkedIds.has(h.id)).map(h=>({id:h.id, label: linkLabel('accom_hotels', h), group:'باقي الفنادق'}));
+    return [...tripHotelsList, ...otherHotelsList];
   }
   function subsRoomsForHotel(hotelId){
     if(!hotelId) return [];
@@ -2441,9 +2496,9 @@
         </select></td>`;
       }
       if(f.key==='hotelId'){
-        return `<td><select class="assign-select assign-hotel" data-id="${esc(row.id)}" ${!row.tripId?'disabled':''}>
+        return `<td><select class="assign-select assign-hotel" data-id="${esc(row.id)}">
           <option value="">— بدون —</option>
-          ${hotels.map(h=>`<option value="${esc(h.id)}" ${String(h.id)===String(row.hotelId||'')?'selected':''}>${esc(linkLabel('accom_hotels',h))}</option>`).join('')}
+          ${linkOptionsHtml(hotels, row.hotelId)}
         </select></td>`;
       }
       if(f.key==='roomId'){
@@ -2608,7 +2663,7 @@
     // بنحدد الحالة دي بدقة عشان أي دور تاني (PR، أدمن، إلخ) يفضل شغال بالظبط
     // زي ما كان قبل كده من غير أي تغيير في زرار الإضافة بتاعه على أي موديول.
     const canWriteModule = !(['accommodation','accounting'].includes(state.user.role) && key==='subscriptions');
-    const canAssignTrip = key==='subscriptions' && state.user.role==='accommodation';
+    const canAssignTrip = key==='subscriptions' && state.user.role==='accommodation' && !options.noAssign;
     // الاشتراك بيتضاف تلقائيًا بس لما حالة المهتم تتغيّر لـ"مشترك" — مفيش زرار
     // إضافة يدوي في هذا القسم حتى لو المستخدم عنده صلاحية كتابة على الموديول.
     const canAddNew = canWriteModule && key!=='subscriptions';
@@ -2669,12 +2724,13 @@
     page.innerHTML = `
       ${options.crumbs? crumbsBar(options.crumbs) : ''}
       <div class="page-head">
-        <h2>${mod.icon} ${esc(mod.title)}</h2>
+        <h2>${mod.icon} ${options.titleOverride? esc(options.titleOverride) : esc(mod.title)}</h2>
         ${canAddNew ? `<button class="btn-primary btn-gold" id="add-btn" style="width:auto;padding:10px 20px;">+ إضافة</button>` : ''}
       </div>
       ${isPRUser() && state.user.role!=='pr_manager' ? `<div class="assumption-note">البيانات المعروضة هنا خاصة بنطاق صلاحيتك. لا يتم عرض بيانات أعضاء العلاقات العامة الآخرين.</div>`:''}
       ${!canWriteModule && !canAssignTrip ? `<div class="assumption-note">عرض فقط: ليس لديك صلاحية إضافة أو تعديل أو حذف بيانات هنا.</div>`:''}
-      ${key==='subscriptions' ? `<div class="assumption-note">الاشتراك بيتولد تلقائيًا فقط عند تغيير حالة المهتم إلى "مشترك" من قسم المهتمون والمندوبين — بعدها هيختفي من قائمة المهتمين ويظهر هنا عشان تكمل بياناته.</div>` : ''}
+      ${key==='subscriptions' && !options.forcedFilter ? `<div class="assumption-note">الاشتراك بيتولد تلقائيًا فقط عند تغيير حالة المهتم إلى "مشترك" من قسم المهتمون والمندوبين — بعدها هيختفي من قائمة المهتمين ويظهر هنا عشان تكمل بياناته. أي اشتراك تتغيّر حالته إلى "ملغي" بيختفي من هنا ويظهر في "الاشتراكات الملغاة".</div>` : ''}
+      ${key==='subscriptions' && options.forcedFilter && options.forcedFilter.subscriptionStatus==='ملغي' ? `<div class="assumption-note">الاشتراكات هنا حالتها "ملغي". لو رجّعت حالة أي اشتراك منها إلى "نشط" أو "مكتمل" من فورم التعديل، هيرجع تلقائيًا لقائمة "الاشتراكات" العادية.</div>` : ''}
       ${canAssignTrip ? `<div class="assumption-note">تقدر هنا تحدد الرحلة والفندق والغرفة لكل مشترك فقط — باقي بيانات المشترك للعرض.</div>`:''}
       ${data.length? `<div class="card" style="padding:14px 20px;margin-bottom:14px;">
         <div style="display:flex;gap:10px;align-items:center;">
@@ -2973,7 +3029,7 @@
         const sel = modalBg.querySelector(`[name="${field.key}"]`);
         if(!sel) return;
         const list = await linkSelectOptionsFor(key, field, parentVal);
-        sel.innerHTML = `<option value="">— بدون —</option>` + list.map(o=>`<option value="${esc(o.id)}">${esc(o.label)}</option>`).join('');
+        sel.innerHTML = `<option value="">— بدون —</option>` + linkOptionsHtml(list, '');
       };
       cascadeFields.forEach(f=>{
         const parentSel = modalBg.querySelector(`[name="${f.parentKey}"]`);
@@ -3101,7 +3157,7 @@
       const opts = refOptions[f.key]||[];
       inner = `<select name="${f.key}" data-linkselect="${f.key}"${f.parentKey?` data-parent-key="${f.parentKey}"`:''}>
         <option value="">— بدون —</option>
-        ${opts.map(o=>`<option value="${esc(o.id)}" ${String(o.id)===String(val)?'selected':''}>${esc(o.label)}</option>`).join('')}
+        ${linkOptionsHtml(opts, val)}
       </select>`;
     } else if(f.type==='textarea'){
       inner = `<textarea name="${f.key}" rows="3">${esc(val)}</textarea>`;
