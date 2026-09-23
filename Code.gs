@@ -676,7 +676,7 @@ function employeeNamesForSession(session) {
   // ورا بعض. الدالة دي بتتنادى من filterRowsForSession/rowBelongsToSession/
   // enforceOwnership لكل جدول PR-filtered، فكانت بتسبب قراءة كاملة إضافية للشيت
   // (Sheets API round-trip) لكل جدول في كل bulk request. دلوقتي بتستخدم نفس كاش
-  // getCachedRows('employees') المستخدم في باقي النظام (30 ثانية) بدل قراءة مباشرة.
+  // getCachedRows('employees') المستخدم في باقي النظام (60 ثانية) بدل قراءة مباشرة.
   const emps = getCachedRows('employees');
   if (session.role === 'pr_manager') return emps.map(x => String(x.name || '')).filter(Boolean);
   const myTeam = sessionOwnTeam(session);
@@ -992,7 +992,9 @@ function enforceOwnership(session, table, payload) {
 /* ---------------- Auto backfill (id / lead code) ---------------- */
 // الهدف: أي صف يتضاف في أي جدول (سواء من النظام أو يدويًا في الشيت) يتاخد له
 // id تلقائي لو ناقص، وأي صف في indoor_leads يتاخد له code تلقائي لو ناقص.
-// بيتنفذوا من جوه getCachedRows نفسها قبل أي قراءة، عشان يشتغلوا في كل الحالات.
+// ملحوظة أداء: الدالتين دول بقوا بيتنفذوا بس من خلال runAutoBackfillAllSheets
+// (عن طريق trigger مجدول) بدل ما يتنفذوا مع كل قراءة (cache miss) زي الأول —
+// شوف getCachedRows تحت للتفاصيل.
 
 function backfillMissingIds(sheet) {
   const lastRow = sheet.getLastRow();
@@ -1131,7 +1133,7 @@ function runAutoBackfillAllSheets() {
 }
 
 /* ---------------- Performance: caching + batch ops ---------------- */
-const SHEET_CACHE_TTL_SECONDS = 30;
+const SHEET_CACHE_TTL_SECONDS = 60;
 
 function getCachedRows(sheetName) {
   const cache = CacheService.getScriptCache();
@@ -1144,16 +1146,12 @@ function getCachedRows(sheetName) {
   const ss = SpreadsheetApp.getActive();
   const sheet = ss.getSheetByName(sheetName);
 
-  if (sheet) {
-    try { backfillMissingIds(sheet); } catch(_) {}
-    if (sheetName === 'indoor_leads') {
-      try { backfillLeadCodes(sheet); } catch(_) {}
-    }
-    if (sheetName === 'subscriptions') {
-      try { backfillSubscriptionCodes(sheet); } catch(_) {}
-    }
-  }
-
+  // ملحوظة أداء: الـ backfill (تعبئة id/code الناقصة) بقى مش بيتنفذ هنا مع كل
+  // cache miss زي الأول — ده كان بيضيف 2-3 نداءات إضافية لجوجل شيتس مع كل
+  // قراءة أول مرة، خصوصًا وقت فتح النظام أو بعد أي كتابة (لأنها بتعمل
+  // invalidate للكاش). بدل كده الـ backfill بقى شغال بس من خلال
+  // runAutoBackfillAllSheets عن طريق trigger مجدول (لازم تظبطه مرة واحدة،
+  // شوف الخطوات في ملاحظات المشروع).
   const rows = sheet ? readRows(sheet) : [];
 
   try {
