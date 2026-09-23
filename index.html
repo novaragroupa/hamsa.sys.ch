@@ -637,7 +637,6 @@
   }
 
   const cache = {};
-  async function getData(key){ if(!cache[key]) cache[key] = await loadList(key); return cache[key]; }
   function invalidate(key){ cache[key] = null; }
 
   function cacheUpsertLocal(table, record){
@@ -651,17 +650,54 @@
     cache[table] = cache[table].filter(r=>String(r.id)!==String(id));
   }
 
+  // تجميع نداءات جوجل شيتس: لو أكتر من مكان في الكود طلب بيانات في نفس
+  // اللحظة (زي ما بيحصل بالظبط وقت الدخول: الداشبورد وprefetchAllData
+  // بيطلبوا مع بعض)، بدل ما كل طلب يبعت نداء منفصل لجوجل شيتس، كل الطلبات
+  // دي بتتجمع تلقائيًا في نداء bulk واحد بس. النتيجة: نفس البيانات، نداء
+  // واحد بدل اتنين أو تلاتة في نفس اللحظة، فأول تحميل بعد تسجيل الدخول
+  // بيبقى أسرع بشكل ملموس.
+  let batchQueue = new Set();
+  let batchScheduled = false;
+  let currentBatchPromise = null;
+
+  function ensureBatchScheduled(){
+    if (batchScheduled) return currentBatchPromise;
+    batchScheduled = true;
+    currentBatchPromise = new Promise((resolve) => {
+      Promise.resolve().then(async () => {
+        const tables = [...batchQueue];
+        batchQueue.clear();
+        batchScheduled = false;
+        currentBatchPromise = null;
+        if(!tables.length){ resolve(); return; }
+        try{
+          const result = await sheetRequestBulk(tables);
+          tables.forEach(t=>{ cache[t] = result[t] || []; });
+        }catch(e){
+          console.error('bulk load error, falling back to parallel single loads', e);
+          await Promise.all(tables.map(async t=>{ try{ cache[t] = await loadList(t); }catch(_){ cache[t]=cache[t]||[]; } }));
+        }
+        resolve();
+      });
+    });
+    return currentBatchPromise;
+  }
+
+  function queueTable(key){
+    if(cache[key]) return Promise.resolve();
+    batchQueue.add(key);
+    return ensureBatchScheduled();
+  }
+
+  async function getData(key){
+    if(cache[key]) return cache[key];
+    await queueTable(key);
+    return cache[key] || [];
+  }
+
   async function getDataMany(keys){
-    const need = [...new Set(keys)].filter(k=>!cache[k]);
-    if(need.length){
-      try{
-        const result = await sheetRequestBulk(need);
-        need.forEach(k=>{ cache[k] = result[k] || []; });
-      }catch(e){
-        console.error('bulk load error, falling back to parallel single loads', e);
-        await Promise.all(need.map(async k=>{ cache[k] = await loadList(k); }));
-      }
-    }
+    const uniq = [...new Set(keys)];
+    await Promise.all(uniq.map(k=>queueTable(k)));
     const out={}; keys.forEach(k=>out[k]=cache[k]||[]); return out;
   }
 
