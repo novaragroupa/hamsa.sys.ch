@@ -1912,7 +1912,7 @@
     return opts;
   }
   function moduleMetricFields(mod){ return mod.fields.filter(f=>f.type==='number'); }
-  function moduleFilterFields(mod){ return mod.fields.filter(f=>f.type==='select' || f.type==='dynamicSelect' || f.type==='date'); }
+  function moduleFilterFields(mod){ return mod.fields.filter(f=>f.type==='select' || f.type==='dynamicSelect'); }
   function moduleDateField(mod){ return mod.fields.find(f=>f.type==='date') || null; }
   // أعمدة مختصرة لسجل اليوم: أول 6 حقول "قابلة للعرض المباشر" (من غير نصوص
   // طويلة أو صور أو متابعات)، عشان الجدول يفضل مختصر وسهل القراءة بسرعة.
@@ -2033,16 +2033,20 @@
       }));
 
       // سجل اليوم/أمس: بيعرض كل السجلات المتسجلة في التاريخ المختار بالظبط
-      // سجل حسب فترة: تقدر تشوف يوم بعينه (من الشهر الحالي)، أو إجمالي الشهر
-      // الحالي كله، أو إجمالي السنة الحالية كلها — وبقى بيتحكم كمان في عناصر
-      // التحليل (الرسومات) بالأسفل، مش بس في جدول السجل.
+      // سجل حسب فترة: تقدر تشوف يوم بعينه (من الشهر الحالي)، أو تختار أي شهر
+      // بعينه، أو تختار أي سنة بعينها — وبقى بيتحكم كمان في عناصر التحليل
+      // (الرسومات) بالأسفل، مش بس في جدول السجل.
       let dailyLogHtml = '';
       let widgetData = filteredData;
       if(dateField){
-        state.analyticsPeriod = state.analyticsPeriod || {mode:'day', day: todayISO()};
-        const period = state.analyticsPeriod;
         const now = new Date();
         const isoOf = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        const curMonth = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+        const curYear = String(now.getFullYear());
+        state.analyticsPeriod = state.analyticsPeriod || {mode:'day', day: todayISO(), month: curMonth, year: curYear};
+        const period = state.analyticsPeriod;
+        if(!period.month) period.month = curMonth;
+        if(!period.year) period.year = curYear;
         const monthMin = isoOf(new Date(now.getFullYear(), now.getMonth(), 1));
         const monthMax = isoOf(new Date(now.getFullYear(), now.getMonth()+1, 0));
         if(!period.day || period.day<monthMin || period.day>monthMax) period.day = todayISO();
@@ -2050,11 +2054,14 @@
 
         let periodRows, periodTitle;
         if(period.mode==='month'){
-          periodRows = filteredData.filter(r=>String(r[dateField.key]||'').slice(0,7)===monthMin.slice(0,7));
-          periodTitle = 'خلال شهر ' + fmtDate(monthMin).slice(3);
+          periodRows = filteredData.filter(r=>String(r[dateField.key]||'').slice(0,7)===period.month);
+          const AR_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+          const mParts = String(period.month||'').split('-');
+          const mIdx = mParts.length===2 ? (parseInt(mParts[1],10)-1) : -1;
+          periodTitle = 'خلال شهر ' + (mIdx>=0 && mIdx<12 ? (AR_MONTHS[mIdx]+' '+mParts[0]) : period.month);
         } else if(period.mode==='year'){
-          periodRows = filteredData.filter(r=>String(r[dateField.key]||'').slice(0,4)===monthMin.slice(0,4));
-          periodTitle = 'خلال سنة ' + monthMin.slice(0,4);
+          periodRows = filteredData.filter(r=>String(r[dateField.key]||'').slice(0,4)===period.year);
+          periodTitle = 'خلال سنة ' + period.year;
         } else {
           periodRows = filteredData.filter(r=>r[dateField.key]===period.day);
           periodTitle = 'يوم ' + fmtDate(period.day);
@@ -2074,6 +2081,16 @@
             <label style="font-size:13px;font-weight:700;color:var(--navy-700);display:block;margin-bottom:6px;">اختر يوم من شهر ${esc(fmtDate(monthMin).slice(3))}</label>
             <input type="date" id="period-day-input" value="${esc(period.day)}" min="${esc(monthMin)}" max="${esc(monthMax)}"
               style="padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);"/>
+          </div>` : ''}
+          ${period.mode==='month' ? `<div style="margin-bottom:14px;">
+            <label style="font-size:13px;font-weight:700;color:var(--navy-700);display:block;margin-bottom:6px;">اختر الشهر</label>
+            <input type="month" id="period-month-input" value="${esc(period.month)}"
+              style="padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);"/>
+          </div>` : ''}
+          ${period.mode==='year' ? `<div style="margin-bottom:14px;">
+            <label style="font-size:13px;font-weight:700;color:var(--navy-700);display:block;margin-bottom:6px;">اختر السنة</label>
+            <input type="number" id="period-year-input" value="${esc(period.year)}" step="1" min="2000" max="2100"
+              style="padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);width:140px;"/>
           </div>` : ''}
           <div class="stat-number" style="font-size:22px;margin-bottom:10px;">${periodRows.length} سجل — ${esc(periodTitle)}</div>
           ${periodRows.length ? `<div class="table-wrap"><table><thead><tr>${cols.map(c=>`<th>${esc(c.label)}</th>`).join('')}</tr></thead>
@@ -2137,6 +2154,17 @@
         const dayInput = document.getElementById('period-day-input');
         if(dayInput) dayInput.addEventListener('change', ()=>{
           state.analyticsPeriod.day = dayInput.value || todayISO();
+          render();
+        });
+        const monthInput = document.getElementById('period-month-input');
+        if(monthInput) monthInput.addEventListener('change', ()=>{
+          const now = new Date();
+          state.analyticsPeriod.month = monthInput.value || (now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
+          render();
+        });
+        const yearInput = document.getElementById('period-year-input');
+        if(yearInput) yearInput.addEventListener('change', ()=>{
+          state.analyticsPeriod.year = yearInput.value || String(new Date().getFullYear());
           render();
         });
       }
