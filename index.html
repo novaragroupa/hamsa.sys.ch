@@ -3122,6 +3122,44 @@
     return data.filter(r=> active.every(([k,v])=> String(r[k]||'')===String(v)));
   }
 
+  /* ---------------- فلترة التاريخ (يوم / شهر لشهر / سنة لسنة) للموديولات
+     المحدد لها حقل تاريخ: المهتمون والمندوبين، فيدباك عملاء العمرة، الاشتراكات ---------------- */
+  const MODULE_DATE_FILTER_FIELD = {
+    indoor_leads: 'registrationDate',
+    callcenter_feedback: 'tripDate',
+    subscriptions: 'subscriptionDate'
+  };
+  function applyModuleDateFilter(data, dateFieldKey, filter){
+    if(!dateFieldKey || !filter || filter.mode==='all') return data;
+    if(filter.mode==='day'){
+      if(!filter.day) return data;
+      return data.filter(r=> String(r[dateFieldKey]||'').slice(0,10)===filter.day);
+    }
+    if(filter.mode==='month'){
+      const from = filter.monthFrom||'', to = filter.monthTo||'';
+      if(!from && !to) return data;
+      return data.filter(r=>{
+        const m = String(r[dateFieldKey]||'').slice(0,7);
+        if(!m) return false;
+        if(from && m<from) return false;
+        if(to && m>to) return false;
+        return true;
+      });
+    }
+    if(filter.mode==='year'){
+      const from = filter.yearFrom||'', to = filter.yearTo||'';
+      if(!from && !to) return data;
+      return data.filter(r=>{
+        const y = String(r[dateFieldKey]||'').slice(0,4);
+        if(!y) return false;
+        if(from && y<from) return false;
+        if(to && y>to) return false;
+        return true;
+      });
+    }
+    return data;
+  }
+
   /* ---------------- Generic module CRUD renderer ---------------- */
   async function renderModule(page, key, options){
     options = options || {};
@@ -3214,6 +3252,15 @@
     const filterFields = filterableFieldsFor(mod, filterExclude);
     const columnFilteredData = applyColumnFilters(data, activeFilters);
 
+    // فلتر التاريخ (يوم / شهر لشهر / سنة لسنة) — للموديولات المحددة فقط
+    // (المهتمون والمندوبين، فيدباك عملاء العمرة، الاشتراكات).
+    const dateFieldKey = MODULE_DATE_FILTER_FIELD[key] || null;
+    const supportsDateFilter = !!dateFieldKey;
+    state.moduleDateFilter = state.moduleDateFilter || {};
+    state.moduleDateFilter[filterStateKey] = state.moduleDateFilter[filterStateKey] || {mode:'all', day: todayISO(), monthFrom:'', monthTo:'', yearFrom:'', yearTo:''};
+    const activeDateFilter = state.moduleDateFilter[filterStateKey];
+    const dateFilteredData = supportsDateFilter ? applyModuleDateFilter(columnFilteredData, dateFieldKey, activeDateFilter) : columnFilteredData;
+
     const bindTableEvents = (container, visibleData)=>{
       const moreBtn = container.querySelector('#module-more');
       if(moreBtn) moreBtn.addEventListener('click', ()=>{
@@ -3267,6 +3314,36 @@
         <button class="btn-secondary" id="clear-module-filters" style="width:auto;padding:8px 14px;">✖ مسح الفلاتر</button>
       </div>` : '';
 
+    const dateFilterBarHtml = supportsDateFilter ? `
+      <div class="analytics-filterbar" id="module-datefilterbar" style="margin-top:10px;flex-direction:column;align-items:flex-start;${activeDateFilter.mode==='all'?'display:none;':''}">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" class="btn-secondary ${activeDateFilter.mode==='all'?'active':''}" data-datemode="all" style="flex:none;padding:8px 14px;">الكل</button>
+          <button type="button" class="btn-secondary ${activeDateFilter.mode==='day'?'active':''}" data-datemode="day" style="flex:none;padding:8px 14px;">يوم</button>
+          <button type="button" class="btn-secondary ${activeDateFilter.mode==='month'?'active':''}" data-datemode="month" style="flex:none;padding:8px 14px;">شهر (فترة)</button>
+          <button type="button" class="btn-secondary ${activeDateFilter.mode==='year'?'active':''}" data-datemode="year" style="flex:none;padding:8px 14px;">سنة (فترة)</button>
+        </div>
+        <div style="margin-top:10px;">
+          ${activeDateFilter.mode==='day' ? `<input type="date" id="module-date-day" value="${esc(activeDateFilter.day||todayISO())}"
+              style="padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:13px;background:var(--sand-50);"/>` : ''}
+          ${activeDateFilter.mode==='month' ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <label style="font-size:12.5px;color:var(--navy-700);">من شهر</label>
+              <input type="month" id="module-date-monthfrom" value="${esc(activeDateFilter.monthFrom||'')}"
+                style="padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:13px;background:var(--sand-50);"/>
+              <label style="font-size:12.5px;color:var(--navy-700);">إلى شهر</label>
+              <input type="month" id="module-date-monthto" value="${esc(activeDateFilter.monthTo||'')}"
+                style="padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:13px;background:var(--sand-50);"/>
+            </div>` : ''}
+          ${activeDateFilter.mode==='year' ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <label style="font-size:12.5px;color:var(--navy-700);">من سنة</label>
+              <input type="number" id="module-date-yearfrom" value="${esc(activeDateFilter.yearFrom||'')}" min="2000" max="2100"
+                style="width:110px;padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:13px;background:var(--sand-50);"/>
+              <label style="font-size:12.5px;color:var(--navy-700);">إلى سنة</label>
+              <input type="number" id="module-date-yearto" value="${esc(activeDateFilter.yearTo||'')}" min="2000" max="2100"
+                style="width:110px;padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:13px;background:var(--sand-50);"/>
+            </div>` : ''}
+        </div>
+      </div>` : '';
+
     page.innerHTML = `
       ${options.crumbs? crumbsBar(options.crumbs) : ''}
       <div class="page-head">
@@ -3279,14 +3356,16 @@
       ${key==='subscriptions' && options.forcedFilter && options.forcedFilter.subscriptionStatus==='ملغي' ? `<div class="assumption-note">الاشتراكات هنا حالتها "ملغي". لو رجّعت حالة أي اشتراك منها إلى "نشط" أو "مكتمل" من فورم التعديل، هيرجع تلقائيًا لقائمة "الاشتراكات" العادية.</div>` : ''}
       ${canAssignTrip ? `<div class="assumption-note">تقدر هنا تحدد الرحلة والفندق والغرفة لكل مشترك فقط — باقي بيانات المشترك للعرض.</div>`:''}
       ${data.length? `<div class="card" style="padding:14px 20px;margin-bottom:14px;">
-        <div style="display:flex;gap:10px;align-items:center;">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <input type="text" id="module-search-input" placeholder="🔍 ابحث في ${esc(mod.title)}..." value="${esc(searchTerm)}"
-            style="flex:1;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);"/>
+            style="flex:1;min-width:200px;padding:10px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);"/>
           ${hasFilterFields? `<button class="icon-btn" id="module-filter-toggle" style="background:var(--sand-100);white-space:nowrap;">🔽 فلتر</button>`:''}
+          ${supportsDateFilter? `<button class="icon-btn" id="module-datefilter-toggle" style="background:var(--sand-100);white-space:nowrap;">📅 فلترة بالتاريخ</button>`:''}
         </div>
         ${filterBarHtml}
+        ${dateFilterBarHtml}
       </div>` : ''}
-      <div class="card"><div id="module-table-wrap">${tableSectionHtml(filterModuleRows(mod, columnFilteredData, linkMaps, searchTerm))}</div></div>`;
+      <div class="card"><div id="module-table-wrap">${tableSectionHtml(filterModuleRows(mod, dateFilteredData, linkMaps, searchTerm))}</div></div>`;
 
     if(options.crumbs && options.crumbHandlers) bindCrumbs(page, options.crumbHandlers);
 
@@ -3310,10 +3389,35 @@
     const clearFiltersBtn = document.getElementById('clear-module-filters');
     if(clearFiltersBtn) clearFiltersBtn.addEventListener('click', ()=>{ state.moduleFilters[filterStateKey] = {}; render(); });
 
-    const searchIndex = columnFilteredData.map(row=>({row, text: rowSearchText(mod, row, linkMaps)}));
+    const dateFilterToggleBtn = document.getElementById('module-datefilter-toggle');
+    if(dateFilterToggleBtn){
+      dateFilterToggleBtn.addEventListener('click', ()=>{
+        const bar = document.getElementById('module-datefilterbar');
+        if(bar) bar.style.display = bar.style.display==='none' ? '' : 'none';
+      });
+    }
+    if(supportsDateFilter){
+      page.querySelectorAll('#module-datefilterbar [data-datemode]').forEach(b=>b.addEventListener('click', ()=>{
+        activeDateFilter.mode = b.dataset.datemode;
+        if(activeDateFilter.mode==='day' && !activeDateFilter.day) activeDateFilter.day = todayISO();
+        render();
+      }));
+      const dayInput = document.getElementById('module-date-day');
+      if(dayInput) dayInput.addEventListener('change', ()=>{ activeDateFilter.day = dayInput.value || todayISO(); render(); });
+      const mfInput = document.getElementById('module-date-monthfrom');
+      if(mfInput) mfInput.addEventListener('change', ()=>{ activeDateFilter.monthFrom = mfInput.value; render(); });
+      const mtInput = document.getElementById('module-date-monthto');
+      if(mtInput) mtInput.addEventListener('change', ()=>{ activeDateFilter.monthTo = mtInput.value; render(); });
+      const yfInput = document.getElementById('module-date-yearfrom');
+      if(yfInput) yfInput.addEventListener('change', ()=>{ activeDateFilter.yearFrom = yfInput.value; render(); });
+      const ytInput = document.getElementById('module-date-yearto');
+      if(ytInput) ytInput.addEventListener('change', ()=>{ activeDateFilter.yearTo = ytInput.value; render(); });
+    }
+
+    const searchIndex = dateFilteredData.map(row=>({row, text: rowSearchText(mod, row, linkMaps)}));
     const filterBySearchIndex = (term)=>{
       term = (term||'').trim().toLowerCase();
-      return term ? searchIndex.filter(x=>x.text.includes(term)).map(x=>x.row) : columnFilteredData;
+      return term ? searchIndex.filter(x=>x.text.includes(term)).map(x=>x.row) : dateFilteredData;
     };
 
     let currentVisible = filterBySearchIndex(searchTerm);
