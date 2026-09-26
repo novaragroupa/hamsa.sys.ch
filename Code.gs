@@ -57,16 +57,20 @@ function doPost(e) {
       });
       if (tables.length > 50) return json({ok:false, error:'Too many tables'}, 400);
 
+      // جدول مش مسموح للدور ده أو مش موجود: بنتخطاه ونرجّعه في skipped بدل ما
+      // نفشّل الطلب كله (كده جدول واحد ممنوع مايبوّظش تحميل باقي الجداول).
       const out = {};
+      const skipped = [];
       for (let i=0;i<tables.length;i++) {
         const t = tables[i];
         if (!isAllowedTable(t) || !isTableReadAllowed(session, t)) {
-          return json({ok:false, error:'Forbidden'});
+          skipped.push(t);
+          continue;
         }
         const filtered = filterRowsForSession(getCachedRows(t), t, session);
         out[t] = sanitizeRowsForClient(t, filtered, session);
       }
-      return json({ok:true, tables:out});
+      return json({ok:true, tables:out, skipped:skipped});
     }
 
     if (action === 'logout') {
@@ -101,50 +105,63 @@ function doPost(e) {
       if (rows.length > MAX_BATCH_ROWS) return json({ok:false, error:'Too many rows'}, 400);
     }
 
-    const ss = SpreadsheetApp.getActive();
-    const sheet = getOrCreateSheet(ss, table);
+    // قفل الكتابة: من غير القفل، طلبين كتابة متزامنين (مستخدمين مختلفين أو إعادة
+    // محاولة من المتصفح) كانوا ممكن يحسبوا نفس رقم الصف الفاضي ويكتبوا فوق بعض
+    // (ضياع بيانات). دلوقتي الكتابات بتتنفذ واحدة ورا التانية. لو القفل مشغول
+    // أكتر من 25 ثانية بنرجّع "Server busy" والمتصفح بيعيد المحاولة تلقائيًا.
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(25000)) return json({ok:false, error:'Server busy, try again'});
+    try {
+      const ss = SpreadsheetApp.getActive();
+      const sheet = getOrCreateSheet(ss, table);
 
-    if (action === 'delete') {
-      const id = String(payload.id || '');
-      const existing = getRowById(sheet, id);
-      if (!rowBelongsToSession(session, table, existing)) return json({ok:false, error:'Forbidden'}, 403);
-      deleteRowById(sheet, id);
-      invalidateCachedRows(table);
-
-    } else if (action === 'upsert') {
-      const existing = getRowById(sheet, String(payload.id || ''));
-      if (existing && !rowBelongsToSession(session, table, existing)) return json({ok:false, error:'Forbidden'}, 403);
-      const cleanPayload = enforceOwnership(session, table, payload);
-      upsertRow(sheet, cleanPayload);
-      invalidateCachedRows(table);
-      if (table === 'employees') syncUserTeamFromEmployee(cleanPayload);
-
-    } else if (action === 'batchDelete') {
-      const ids = (payload.ids || []).map(String).filter(Boolean);
-      const existingRows = readRows(sheet);
-      for (let i=0;i<ids.length;i++) {
-        const existing = existingRows.find(function(r){ return String(r.id || '') === ids[i]; });
-        if (existing && !rowBelongsToSession(session, table, existing)) {
-          return json({ok:false, error:'Forbidden'}, 403);
+      if (action === 'delete') {
+        const id = String(payload.id || '');
+        const existing = getRowById(sheet, id);
+        // الصف اتحذف قبل كده (مثلًا إعادة محاولة بعد ضياع الرد) = نجاح، مش Forbidden.
+        if (existing) {
+          if (!rowBelongsToSession(session, table, existing)) return json({ok:false, error:'Forbidden'}, 403);
+          deleteRowById(sheet, id);
+          invalidateCachedRows(table);
         }
+
+      } else if (action === 'upsert') {
+        const existing = getRowById(sheet, String(payload.id || ''));
+        if (existing && !rowBelongsToSession(session, table, existing)) return json({ok:false, error:'Forbidden'}, 403);
+        const cleanPayload = enforceOwnership(session, table, payload);
+        upsertRow(sheet, cleanPayload);
+        invalidateCachedRows(table);
+        if (table === 'employees') syncUserTeamFromEmployee(cleanPayload);
+
+      } else if (action === 'batchDelete') {
+        const ids = (payload.ids || []).map(String).filter(Boolean);
+        const byId = rowsById(readRows(sheet));
+        for (let i=0;i<ids.length;i++) {
+          const existing = byId[ids[i]];
+          if (existing && !rowBelongsToSession(session, table, existing)) {
+            return json({ok:false, error:'Forbidden'}, 403);
+          }
+        }
+        deleteRowsBatch(sheet, ids);
+        invalidateCachedRows(table);
+
+      } else if (action === 'batchUpsert') {
+        const rows = payload.rows || [];
+        const byId = rowsById(readRows(sheet));
+        const cleanRows = rows.map(function(r) {
+          const existing = byId[String((r || {}).id || '')];
+          if (existing && !rowBelongsToSession(session, table, existing)) throw new Error('Forbidden');
+          return enforceOwnership(session, table, r || {});
+        });
+        upsertRowsBatch(sheet, cleanRows);
+        invalidateCachedRows(table);
+        if (table === 'employees') cleanRows.forEach(syncUserTeamFromEmployee);
+
+      } else {
+        return json({ok:false, error:'Unknown action'}, 400);
       }
-      deleteRowsBatch(sheet, ids);
-      invalidateCachedRows(table);
-
-    } else if (action === 'batchUpsert') {
-      const rows = payload.rows || [];
-      const existingRows = readRows(sheet);
-      const cleanRows = rows.map(function(r) {
-        const existing = existingRows.find(function(x){ return String(x.id || '') === String((r || {}).id || ''); });
-        if (existing && !rowBelongsToSession(session, table, existing)) throw new Error('Forbidden');
-        return enforceOwnership(session, table, r || {});
-      });
-      upsertRowsBatch(sheet, cleanRows);
-      invalidateCachedRows(table);
-      if (table === 'employees') cleanRows.forEach(syncUserTeamFromEmployee);
-
-    } else {
-      return json({ok:false, error:'Unknown action'}, 400);
+    } finally {
+      try { lock.releaseLock(); } catch (_) {}
     }
 
     return json({ok:true});
@@ -1135,35 +1152,80 @@ function runAutoBackfillAllSheets() {
 /* ---------------- Performance: caching + batch ops ---------------- */
 const SHEET_CACHE_TTL_SECONDS = 60;
 
+// كاش الجداول: القيمة الواحدة في CacheService حدها 100KB (بالبايت، والعربي بياخد
+// 2-3 بايت للحرف). أي جدول أكبر من كده كان بيتخطى الكاش وبيتقرأ من الشيت في كل
+// طلب. دلوقتي بنقسّمه لأجزاء صغيرة: المفتاح الأساسي بيحتوي "#N" (عدد الأجزاء).
+const CACHE_CHUNK_CHARS = 30000;
+const CACHE_MAX_CHUNKS = 30;
+
+function cacheKeysFor(name, n) {
+  const keys = [];
+  for (let i = 0; i < n; i++) keys.push('rows_' + name + '_' + i);
+  return keys;
+}
+
+function cacheReadRows(cache, sheetName) {
+  const meta = cache.get('rows_' + sheetName);
+  if (!meta) return null;
+  if (meta.charAt(0) !== '#') return JSON.parse(meta);
+  const n = parseInt(meta.slice(1), 10) || 0;
+  const keys = cacheKeysFor(sheetName, n);
+  const parts = cache.getAll(keys);
+  let text = '';
+  for (let i = 0; i < keys.length; i++) {
+    const p = parts[keys[i]];
+    if (p === undefined || p === null) return null; // جزء ناقص (اتمسح/انتهى) → اقرأ من الشيت
+    text += p;
+  }
+  return JSON.parse(text);
+}
+
+function cacheWriteRows(cache, sheetName, rows) {
+  const serialized = JSON.stringify(rows);
+  if (serialized.length <= CACHE_CHUNK_CHARS) {
+    cache.put('rows_' + sheetName, serialized, SHEET_CACHE_TTL_SECONDS);
+    return;
+  }
+  const n = Math.ceil(serialized.length / CACHE_CHUNK_CHARS);
+  if (n > CACHE_MAX_CHUNKS) return; // جدول ضخم جدًا: من غير كاش
+  const batch = {};
+  for (let i = 0; i < n; i++) {
+    batch['rows_' + sheetName + '_' + i] = serialized.substr(i * CACHE_CHUNK_CHARS, CACHE_CHUNK_CHARS);
+  }
+  batch['rows_' + sheetName] = '#' + n;
+  cache.putAll(batch, SHEET_CACHE_TTL_SECONDS);
+}
+
 function getCachedRows(sheetName) {
   const cache = CacheService.getScriptCache();
-  const cacheKey = 'rows_' + sheetName;
   try {
-    const cached = cache.get(cacheKey);
-    if (cached) return JSON.parse(cached);
+    const cached = cacheReadRows(cache, sheetName);
+    if (cached) return cached;
   } catch (_) { /* تجاهل أي خطأ كاش وارجع لقراءة الشيت مباشرة */ }
 
   const ss = SpreadsheetApp.getActive();
   const sheet = ss.getSheetByName(sheetName);
 
-  // ملحوظة أداء: الـ backfill (تعبئة id/code الناقصة) بقى مش بيتنفذ هنا مع كل
-  // cache miss زي الأول — ده كان بيضيف 2-3 نداءات إضافية لجوجل شيتس مع كل
-  // قراءة أول مرة، خصوصًا وقت فتح النظام أو بعد أي كتابة (لأنها بتعمل
-  // invalidate للكاش). بدل كده الـ backfill بقى شغال بس من خلال
-  // runAutoBackfillAllSheets عن طريق trigger مجدول (لازم تظبطه مرة واحدة،
-  // شوف الخطوات في ملاحظات المشروع).
+  // ملحوظة أداء: الـ backfill (تعبئة id/code الناقصة) مش بيتنفذ هنا مع كل
+  // cache miss، وبيشتغل بس من خلال runAutoBackfillAllSheets عن طريق trigger مجدول.
   const rows = sheet ? readRows(sheet) : [];
 
-  try {
-    const serialized = JSON.stringify(rows);
-    if (serialized.length < 95000) cache.put(cacheKey, serialized, SHEET_CACHE_TTL_SECONDS);
-  } catch (_) { /* تجاهل */ }
+  try { cacheWriteRows(cache, sheetName, rows); } catch (_) { /* تجاهل */ }
 
   return rows;
 }
 
 function invalidateCachedRows(sheetName) {
-  try { CacheService.getScriptCache().remove('rows_' + sheetName); } catch (_) {}
+  try {
+    const cache = CacheService.getScriptCache();
+    const keys = ['rows_' + sheetName];
+    const meta = cache.get('rows_' + sheetName);
+    if (meta && meta.charAt(0) === '#') {
+      const n = parseInt(meta.slice(1), 10) || 0;
+      cacheKeysFor(sheetName, n).forEach(function(k) { keys.push(k); });
+    }
+    cache.removeAll(keys);
+  } catch (_) {}
 }
 
 function upsertRowsBatch(sheet, rows) {
@@ -1328,6 +1390,15 @@ function deleteRowById(sheet, id) {
   const values=sheet.getRange(2,idCol,sheet.getLastRow()-1,1).getValues().flat().map(String);
   const found=values.indexOf(id);
   if(found>=0) sheet.deleteRow(found+2);
+}
+
+function rowsById(rows) {
+  const m = {};
+  (rows || []).forEach(function(r) {
+    const id = String((r || {}).id || '');
+    if (id) m[id] = r;
+  });
+  return m;
 }
 
 function json(obj) {
