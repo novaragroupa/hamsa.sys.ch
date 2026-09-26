@@ -2033,31 +2033,58 @@
       }));
 
       // سجل اليوم/أمس: بيعرض كل السجلات المتسجلة في التاريخ المختار بالظبط
-      // (من حقل التاريخ الأساسي للقسم)، مستقل عن عناصر التحليل (الرسومات)
-      // اللي المستخدم بناها، عشان يشتغل حتى لو لسه مفيش عناصر تحليل.
+      // سجل حسب فترة: تقدر تشوف يوم بعينه (من الشهر الحالي)، أو إجمالي الشهر
+      // الحالي كله، أو إجمالي السنة الحالية كلها — وبقى بيتحكم كمان في عناصر
+      // التحليل (الرسومات) بالأسفل، مش بس في جدول السجل.
       let dailyLogHtml = '';
+      let widgetData = filteredData;
       if(dateField){
-        const activeDay = state.analyticsFilters[dateField.key] || '';
+        state.analyticsPeriod = state.analyticsPeriod || {mode:'day', day: todayISO()};
+        const period = state.analyticsPeriod;
+        const now = new Date();
+        const isoOf = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        const monthMin = isoOf(new Date(now.getFullYear(), now.getMonth(), 1));
+        const monthMax = isoOf(new Date(now.getFullYear(), now.getMonth()+1, 0));
+        if(!period.day || period.day<monthMin || period.day>monthMax) period.day = todayISO();
         const cols = dailyLogColumns(mod);
+
+        let periodRows, periodTitle;
+        if(period.mode==='month'){
+          periodRows = filteredData.filter(r=>String(r[dateField.key]||'').slice(0,7)===monthMin.slice(0,7));
+          periodTitle = 'خلال شهر ' + fmtDate(monthMin).slice(3);
+        } else if(period.mode==='year'){
+          periodRows = filteredData.filter(r=>String(r[dateField.key]||'').slice(0,4)===monthMin.slice(0,4));
+          periodTitle = 'خلال سنة ' + monthMin.slice(0,4);
+        } else {
+          periodRows = filteredData.filter(r=>r[dateField.key]===period.day);
+          periodTitle = 'يوم ' + fmtDate(period.day);
+        }
+        widgetData = periodRows;
+
         dailyLogHtml = `<div class="card" style="margin-bottom:18px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;${activeDay?'margin-bottom:12px;':''}">
-            <h4 style="margin:0;">📅 سجل يوم بعينه — حسب ${esc(dateField.label)}</h4>
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+            <h4 style="margin:0;">📅 سجل حسب ${esc(dateField.label)}</h4>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button type="button" class="btn-secondary ${activeDay===todayISO()?'active':''}" data-daypick="today" style="flex:none;padding:8px 16px;">اليوم</button>
-              <button type="button" class="btn-secondary ${activeDay===yesterdayISO()?'active':''}" data-daypick="yesterday" style="flex:none;padding:8px 16px;">أمس</button>
-              ${activeDay? `<button type="button" class="btn-secondary" data-daypick="clear" style="flex:none;padding:8px 16px;">✖ إلغاء</button>`:''}
+              <button type="button" class="btn-secondary ${period.mode==='day'?'active':''}" data-period="day" style="flex:none;padding:8px 16px;">يوم</button>
+              <button type="button" class="btn-secondary ${period.mode==='month'?'active':''}" data-period="month" style="flex:none;padding:8px 16px;">إجمالي الشهر</button>
+              <button type="button" class="btn-secondary ${period.mode==='year'?'active':''}" data-period="year" style="flex:none;padding:8px 16px;">إجمالي السنة</button>
             </div>
           </div>
-          ${!activeDay ? `<div class="assumption-note" style="margin:0;">اضغط "اليوم" أو "أمس"، أو اختر تاريخ تاني من فلتر "${esc(dateField.label)}" فوق، عشان تشوف كل حاجة اتسجلت في يوم بعينه.</div>` :
-            (filteredData.length ? `<div class="table-wrap"><table><thead><tr>${cols.map(c=>`<th>${esc(c.label)}</th>`).join('')}</tr></thead>
-              <tbody>${filteredData.map(r=>`<tr>${cols.map(c=>`<td>${fieldDisplay(c, r[c.key], {}, r)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
-            : `<div class="empty-state" style="padding:20px;"><div class="big">📭</div>مفيش حاجة اتسجلت في ${esc(fmtDate(activeDay))}</div>`)}
+          ${period.mode==='day' ? `<div style="margin-bottom:14px;">
+            <label style="font-size:13px;font-weight:700;color:var(--navy-700);display:block;margin-bottom:6px;">اختر يوم من شهر ${esc(fmtDate(monthMin).slice(3))}</label>
+            <input type="date" id="period-day-input" value="${esc(period.day)}" min="${esc(monthMin)}" max="${esc(monthMax)}"
+              style="padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;background:var(--sand-50);"/>
+          </div>` : ''}
+          <div class="stat-number" style="font-size:22px;margin-bottom:10px;">${periodRows.length} سجل — ${esc(periodTitle)}</div>
+          ${periodRows.length ? `<div class="table-wrap"><table><thead><tr>${cols.map(c=>`<th>${esc(c.label)}</th>`).join('')}</tr></thead>
+            <tbody>${periodRows.map(r=>`<tr>${cols.map(c=>`<td>${fieldDisplay(c, r[c.key], {}, r)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
+          : `<div class="empty-state" style="padding:20px;"><div class="big">📭</div>مفيش حاجة اتسجلت في الفترة دي</div>`}
         </div>`;
       }
 
       widgets = (await getData('widgets')).filter(w=>w.dashboardId===board.id);
       const widgetCards = widgets.map(w=>{
-        const entries = groupAndAggregate(filteredData, w.groupBy, w.metric, w.metricField, teamMap);
+        const entries = groupAndAggregate(widgetData, w.groupBy, w.metric, w.metricField, teamMap);
         return `<div class="widget-card">
           <div class="widget-head"><h4>${esc(w.title)}</h4>
             <div><button class="icon-btn" data-editw="${w.id}">✏️</button><button class="icon-btn del" data-delw="${w.id}">🗑️</button></div>
@@ -2075,6 +2102,7 @@
           </div>
         </div>
         ${dailyLogHtml}
+        ${dateField? `<div class="assumption-note" style="margin-bottom:14px;">الفترة المختارة أعلاه (يوم / إجمالي الشهر / إجمالي السنة) بتتحكم كمان في عناصر التحليل بالأسفل.</div>` : ''}
         <div class="widgets-grid">
           ${widgetCards}
           <button class="widget-card add-widget-card" id="add-widget-btn">➕<br/>إضافة عنصر تحليل</button>
@@ -2102,12 +2130,15 @@
       const clearBtn = document.getElementById('clear-filters');
       if(clearBtn) clearBtn.addEventListener('click', ()=>{ state.analyticsFilters={}; render(); });
       if(dateField){
-        page.querySelectorAll('[data-daypick]').forEach(b=>b.addEventListener('click', ()=>{
-          const act = b.dataset.daypick;
-          if(act==='clear') delete state.analyticsFilters[dateField.key];
-          else state.analyticsFilters[dateField.key] = act==='today' ? todayISO() : yesterdayISO();
+        page.querySelectorAll('[data-period]').forEach(b=>b.addEventListener('click', ()=>{
+          state.analyticsPeriod.mode = b.dataset.period;
           render();
         }));
+        const dayInput = document.getElementById('period-day-input');
+        if(dayInput) dayInput.addEventListener('change', ()=>{
+          state.analyticsPeriod.day = dayInput.value || todayISO();
+          render();
+        });
       }
       document.getElementById('del-board-btn').addEventListener('click', async ()=>{
         if(!confirm('حذف اللوحة وكل عناصر التحليل بداخلها؟')) return;
