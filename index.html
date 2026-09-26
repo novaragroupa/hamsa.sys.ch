@@ -2954,7 +2954,9 @@
         }
       });
     };
-    container.querySelectorAll('.assign-trip').forEach(sel=>handle(sel,(row,val)=>({...row, tripId:val, hotelId:'', roomId:''})));
+    // تغيير الرحلة مابيمسحش الفندق/الغرفة المختارين: أي فندق مسموح لأي رحلة
+    // (ensureTripHotelLink هيربطهم تلقائيًا)، فمفيش داعي يفقد المستخدم اختياره.
+    container.querySelectorAll('.assign-trip').forEach(sel=>handle(sel,(row,val)=>({...row, tripId:val})));
     container.querySelectorAll('.assign-hotel').forEach(sel=>handle(sel,(row,val)=>({...row, hotelId:val, roomId:''})));
     container.querySelectorAll('.assign-room').forEach(sel=>handle(sel,(row,val)=>({...row, roomId:val})));
   }
@@ -3466,15 +3468,24 @@
         const sel = modalBg.querySelector(`[name="${field.key}"]`);
         if(!sel) return;
         const list = await linkSelectOptionsFor(key, field, parentVal);
-        sel.innerHTML = `<option value="">— بدون —</option>` + linkOptionsHtml(list, '');
+        // لو القيمة المختارة حاليًا لسه موجودة في القائمة الجديدة (زي الفندق
+        // اللي بيفضل متاح مهما اتغيّرت الرحلة)، نسيبها زي ما هي بدل ما نمسحها.
+        const keep = list.some(o=>String(o.id)===String(sel.value)) ? sel.value : '';
+        sel.innerHTML = `<option value="">— بدون —</option>` + linkOptionsHtml(list, keep);
       };
       cascadeFields.forEach(f=>{
         const parentSel = modalBg.querySelector(`[name="${f.parentKey}"]`);
         if(!parentSel) return;
         parentSel.addEventListener('change', async ()=>{
+          const sel = modalBg.querySelector(`[name="${f.key}"]`);
+          const before = sel ? sel.value : '';
           await fillOptions(f, parentSel.value);
+          const after = sel ? sel.value : '';
+          // امسح قيمة الحفيد (الغرفة) بس لو قيمة الابن (الفندق) اتغيّرت فعلًا؛
+          // لو الفندق فضل زي ما هو (زي تغيير الرحلة من غير ما يمس الفندق) مفيش
+          // داعي نفقد اختيار الغرفة.
           const grandChild = cascadeFields.find(gc=>gc.parentKey===f.key);
-          if(grandChild){
+          if(grandChild && before!==after){
             const gcSel = modalBg.querySelector(`[name="${grandChild.key}"]`);
             if(gcSel) gcSel.innerHTML = `<option value="">— بدون —</option>`;
           }
