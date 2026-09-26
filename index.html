@@ -1277,7 +1277,20 @@
     await apiAdd('subscriptions',sub);
   }
 
+  // لو المشترك اتسكّن في فندق مش مربوط بالرحلة دي رسميًا في قسم "الرحلات" (يعني
+  // اختار فندق من "باقي الفنادق")، بنربط الفندق بالرحلة تلقائيًا هنا، عشان لما
+  // تدخل على صفحة الرحلة تلاقي الفندق ده موجود وكل حاجة زيه زي أي فندق مضاف يدويًا.
+  async function ensureTripHotelLink(tripId, hotelId){
+    if(!tripId || !hotelId) return;
+    const links = await getData('trip_hotels');
+    const exists = links.some(l=>String(l.tripId)===String(tripId) && String(l.hotelId)===String(hotelId));
+    if(exists) return;
+    await apiAdd('trip_hotels', {id:uid(), tripId, hotelId, notes:''});
+  }
+
   async function syncSubscriptionGuest(sub){
+    await ensureTripHotelLink(sub.tripId, sub.hotelId);
+
     const guests = await getData('accom_guests');
     const existing = guests.find(g=>String(g.subscriptionId||'')===String(sub.id));
 
