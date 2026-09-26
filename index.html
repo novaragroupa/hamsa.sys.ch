@@ -200,6 +200,7 @@
   .form-grid .full{grid-column:1/-1;}
   .modal-actions{display:flex;gap:10px;margin-top:20px;}
   .btn-secondary{flex:1;padding:11px;background:var(--sand-100);color:var(--navy-800);border-radius:10px;font-weight:700;font-size:14px;}
+  .btn-secondary.active{background:var(--navy-800);color:#fff;}
   .btn-secondary:hover{background:var(--line);}
   .modal-actions .btn-primary{flex:1;}
   .photo-preview{width:64px;height:64px;border-radius:50%;object-fit:cover;background:var(--sand-100);margin-bottom:8px;display:block;}
@@ -1122,6 +1123,10 @@
     const d = new Date();
     return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   }
+  function yesterdayISO(){
+    const d = new Date(); d.setDate(d.getDate()-1);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
   // حقول التاريخ اللي بتتولّد تلقائيًا وقت الإضافة ومابتظهرش في الفورم.
   const AUTO_DATE_FIELDS = { subscriptions:'subscriptionDate', indoor_leads:'registrationDate' };
   function isAutoDateField(moduleKey, f){ return AUTO_DATE_FIELDS[moduleKey]===f.key; }
@@ -1900,11 +1905,20 @@
           opts.push({key:f.key+'__team', label:f.label+' — الفريق'});
         }
       }
+      // حقول التاريخ بتتحط كخيار تقسيم كمان، عشان تقدر تعمل عنصر تحليل
+      // "عدد السجلات حسب اليوم" وتشوف كل حاجة اتسجلت في يومها بالظبط.
+      if(f.type==='date') opts.push({key:f.key, label:f.label});
     });
     return opts;
   }
   function moduleMetricFields(mod){ return mod.fields.filter(f=>f.type==='number'); }
-  function moduleFilterFields(mod){ return mod.fields.filter(f=>f.type==='select' || f.type==='dynamicSelect'); }
+  function moduleFilterFields(mod){ return mod.fields.filter(f=>f.type==='select' || f.type==='dynamicSelect' || f.type==='date'); }
+  function moduleDateField(mod){ return mod.fields.find(f=>f.type==='date') || null; }
+  // أعمدة مختصرة لسجل اليوم: أول 6 حقول "قابلة للعرض المباشر" (من غير نصوص
+  // طويلة أو صور أو متابعات)، عشان الجدول يفضل مختصر وسهل القراءة بسرعة.
+  function dailyLogColumns(mod){
+    return mod.fields.filter(f=>!['textarea','image','followups','readonly'].includes(f.type)).slice(0,6);
+  }
 
   async function employeeTeamMap(){
     const emps = await getData('employees');
@@ -1994,26 +2008,52 @@
     const board = myBoards.find(b=>b.id===state.analyticsBoard) || null;
     state.analyticsFilters = state.analyticsFilters || {};
 
-    let bodyHtml, mod, widgets;
+    let bodyHtml, mod, widgets, dateField;
     if(!board){
       bodyHtml = `<div class="card"><div class="empty-state"><div class="big">📊</div>لا توجد لوحات تحليل بعد — اضغط "+ لوحة جديدة" لبدء بناء التحليلات الخاصة بقسمك</div></div>`;
     } else {
       mod = MODULES[board.sourceModule];
+      dateField = moduleDateField(mod);
       const rawData = await getData(board.sourceModule);
       const teamMap = await employeeTeamMap();
       const filterFields = moduleFilterFields(mod);
       const filtersHtml = filterFields.map(f=>{
-        const options = f.type==='select'? f.options : [...new Set(rawData.map(r=>r[f.key]).filter(Boolean))];
+        let options = f.type==='select'? f.options : [...new Set(rawData.map(r=>r[f.key]).filter(Boolean))];
+        if(f.type==='date') options = options.sort().reverse(); // الأحدث الأول
         const cur = state.analyticsFilters[f.key] || '';
+        const optionLabel = o => f.type==='date' ? fmtDate(o) : o;
         return `<select class="analytics-filter" data-field="${f.key}">
           <option value="">${esc(f.label)}: الكل</option>
-          ${options.map(o=>`<option value="${esc(o)}" ${o===cur?'selected':''}>${esc(o)}</option>`).join('')}
+          ${options.map(o=>`<option value="${esc(o)}" ${o===cur?'selected':''}>${esc(optionLabel(o))}</option>`).join('')}
         </select>`;
       }).join('');
 
       const filteredData = rawData.filter(r=> filterFields.every(f=>{
         const v = state.analyticsFilters[f.key]; return !v || r[f.key]===v;
       }));
+
+      // سجل اليوم/أمس: بيعرض كل السجلات المتسجلة في التاريخ المختار بالظبط
+      // (من حقل التاريخ الأساسي للقسم)، مستقل عن عناصر التحليل (الرسومات)
+      // اللي المستخدم بناها، عشان يشتغل حتى لو لسه مفيش عناصر تحليل.
+      let dailyLogHtml = '';
+      if(dateField){
+        const activeDay = state.analyticsFilters[dateField.key] || '';
+        const cols = dailyLogColumns(mod);
+        dailyLogHtml = `<div class="card" style="margin-bottom:18px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;${activeDay?'margin-bottom:12px;':''}">
+            <h4 style="margin:0;">📅 سجل يوم بعينه — حسب ${esc(dateField.label)}</h4>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button type="button" class="btn-secondary ${activeDay===todayISO()?'active':''}" data-daypick="today" style="flex:none;padding:8px 16px;">اليوم</button>
+              <button type="button" class="btn-secondary ${activeDay===yesterdayISO()?'active':''}" data-daypick="yesterday" style="flex:none;padding:8px 16px;">أمس</button>
+              ${activeDay? `<button type="button" class="btn-secondary" data-daypick="clear" style="flex:none;padding:8px 16px;">✖ إلغاء</button>`:''}
+            </div>
+          </div>
+          ${!activeDay ? `<div class="assumption-note" style="margin:0;">اضغط "اليوم" أو "أمس"، أو اختر تاريخ تاني من فلتر "${esc(dateField.label)}" فوق، عشان تشوف كل حاجة اتسجلت في يوم بعينه.</div>` :
+            (filteredData.length ? `<div class="table-wrap"><table><thead><tr>${cols.map(c=>`<th>${esc(c.label)}</th>`).join('')}</tr></thead>
+              <tbody>${filteredData.map(r=>`<tr>${cols.map(c=>`<td>${fieldDisplay(c, r[c.key], {}, r)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
+            : `<div class="empty-state" style="padding:20px;"><div class="big">📭</div>مفيش حاجة اتسجلت في ${esc(fmtDate(activeDay))}</div>`)}
+        </div>`;
+      }
 
       widgets = (await getData('widgets')).filter(w=>w.dashboardId===board.id);
       const widgetCards = widgets.map(w=>{
@@ -2034,6 +2074,7 @@
             <button class="icon-btn del" id="del-board-btn">🗑️ حذف اللوحة</button>
           </div>
         </div>
+        ${dailyLogHtml}
         <div class="widgets-grid">
           ${widgetCards}
           <button class="widget-card add-widget-card" id="add-widget-btn">➕<br/>إضافة عنصر تحليل</button>
@@ -2060,6 +2101,14 @@
       }));
       const clearBtn = document.getElementById('clear-filters');
       if(clearBtn) clearBtn.addEventListener('click', ()=>{ state.analyticsFilters={}; render(); });
+      if(dateField){
+        page.querySelectorAll('[data-daypick]').forEach(b=>b.addEventListener('click', ()=>{
+          const act = b.dataset.daypick;
+          if(act==='clear') delete state.analyticsFilters[dateField.key];
+          else state.analyticsFilters[dateField.key] = act==='today' ? todayISO() : yesterdayISO();
+          render();
+        }));
+      }
       document.getElementById('del-board-btn').addEventListener('click', async ()=>{
         if(!confirm('حذف اللوحة وكل عناصر التحليل بداخلها؟')) return;
         const ws = (await getData('widgets')).filter(w=>w.dashboardId===board.id);
