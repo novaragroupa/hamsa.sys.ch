@@ -2018,7 +2018,7 @@
       const teamMap = await employeeTeamMap();
       const filterFields = moduleFilterFields(mod);
       const filtersHtml = filterFields.map(f=>{
-        let options = f.type==='select'? f.options : [...new Set(rawData.map(r=>r[f.key]).filter(Boolean))];
+        let options = (f.type==='select'? f.options : [...new Set(rawData.map(r=>r[f.key]).filter(Boolean))]).filter(Boolean);
         if(f.type==='date') options = options.sort().reverse(); // الأحدث الأول
         const cur = state.analyticsFilters[f.key] || '';
         const optionLabel = o => f.type==='date' ? fmtDate(o) : o;
@@ -3257,7 +3257,7 @@
     const filterBarHtml = hasFilterFields ? `
       <div class="analytics-filterbar" id="module-filterbar" style="margin-top:10px;${Object.values(activeFilters).some(v=>v)?'':'display:none;'}">
         ${filterFields.map(f=>{
-          const opts = f.type==='select'? f.options : [...new Set(data.map(r=>r[f.key]).filter(Boolean))];
+          const opts = (f.type==='select'? f.options : [...new Set(data.map(r=>r[f.key]).filter(Boolean))]).filter(Boolean);
           const cur = activeFilters[f.key]||'';
           return `<select class="analytics-filter" data-filterfield="${f.key}">
             <option value="">${esc(f.label)}: الكل</option>
